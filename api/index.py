@@ -1,5 +1,6 @@
 import json
 import os
+import traceback
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -31,6 +32,8 @@ def recommend():
     try:
         # 1. Menangkap JSON yang dikirim oleh React (Axios)
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
         
         # 2. Mengekstrak 11 parameter filter
         user_input = {
@@ -49,11 +52,13 @@ def recommend():
 
         # 3. Masukkan ke fungsi penghitung TF-IDF dan Cosine Similarity di recommender.py
         # PENTING: Pastikan fungsi get_recommendations milik Anda siap menerima dictionary 'user_input' ini
-        hasil = ai_engine.get_recommendations(user_input) 
+        hasil = ai_engine.get_recommendations(user_input)
         
         # 4. Kembalikan hasilnya ke React dalam bentuk JSON
         return jsonify(hasil)
         
     except Exception as e:
-        print(f"Error saat memproses rekomendasi: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        error_msg = str(e)
+        detailed_error = traceback.format_exc()
+        print(f"ERROR: {detailed_error}")
+        return jsonify({"error": error_msg, "traceback": detailed_error}), 500

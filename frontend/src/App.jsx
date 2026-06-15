@@ -57,8 +57,8 @@ export default function App() {
       <footer className="bg-white mt-12 py-6">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className="text-sm text-slate-500 font-medium">
-            &copy; {new Date().getFullYear()} Sistem Rekomendasi Laptop -
-            Skripsi UMN
+            &copy; {new Date().getFullYear()} Sistem Rekomendasi Laptop - Batara
+            Hotdo Horas Simbolon (00000078626) All rights reserved.
           </p>
         </div>
       </footer>
