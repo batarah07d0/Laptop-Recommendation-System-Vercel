@@ -26,6 +26,7 @@ except Exception as e:
     print(f"Error memuat dataset: {e}")
 
 @app.route('/api/recommend', methods=['POST'])
+@app.route('/recommend', methods=['POST'])
 def recommend():
     try:
         # 1. Menangkap JSON yang dikirim oleh React (Axios)
