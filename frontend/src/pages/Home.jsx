@@ -25,13 +25,27 @@ export default function Home({ onSearchResults }) {
     setIsLoading(true);
     setError("");
 
+    const data = {
+      description,
+      max_price: maxPrice,
+      max_weight: maxWeight,
+      max_screen: maxScreen,
+      cpu,
+      ram,
+      storage,
+      os,
+      gpu_type: gpuType,
+      panel_type: panelType,
+      screen_quality: screenQuality,
+    };
+
     try {
-      //   const response = await axios.post("http://localhost:5000/recommend", {
       const response = await axios.post("/api/recommend", data);
       onSearchResults(response.data);
     } catch (err) {
+      console.error(err);
       setError(
-        "Gagal terhubung ke Mesin AI. Server mungkin sedang tidur atau sibuk.",
+        "Gagal terhubung ke Mesin Pencarian. Server mungkin sedang sibuk atau terjadi gangguan.",
       );
     } finally {
       setIsLoading(false);
