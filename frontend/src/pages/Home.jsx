@@ -27,7 +27,7 @@ export default function Home({ onSearchResults }) {
 
     try {
       //   const response = await axios.post("http://localhost:5000/recommend", {
-      const response = await axios.post("api/recommend", data);
+      const response = await axios.post("/api/recommend", data);
       onSearchResults(response.data);
     } catch (err) {
       setError(
