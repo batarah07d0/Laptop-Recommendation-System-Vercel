@@ -24,15 +24,26 @@ export default function App() {
       <nav className="bg-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
+            {/* Tombol Home (LaptopRec) */}
             <button
               onClick={() => navigateTo("home")}
-              className="text-2xl font-bold text-slate-800 cursor-pointer"
+              className={`text-2xl font-bold cursor-pointer transition-all duration-300 ${
+                currentView === "home"
+                  ? "text-blue-600 hover:text-blue-800!"
+                  : "text-slate-800 hover:text-blue-600!"
+              }`}
             >
               LaptopRec
             </button>
+
+            {/* Tombol About (Tentang Sistem) */}
             <button
               onClick={() => navigateTo("about")}
-              className={`${currentView === "about" ? "text-blue-600" : "text-slate-800"} hover:text-blue-600 font-bold transition-colors cursor-pointer`}
+              className={`font-bold cursor-pointer transition-all duration-300 ${
+                currentView === "about"
+                  ? "text-blue-600 hover:text-blue-800!"
+                  : "text-slate-800 hover:text-blue-600!"
+              }`}
             >
               Tentang Sistem
             </button>

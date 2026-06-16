@@ -112,7 +112,7 @@ export default function Result({ results, onBack }) {
                   Rp {Number(laptop.price || 0).toLocaleString("id-ID")}
                 </p>
 
-                <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm text-gray-700 mb-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-100 flex-1 content-start">
                   <div>
                     <span className="block text-xs text-gray-400 mb-0.5">
                       CPU (Prosesor)
@@ -173,24 +173,26 @@ export default function Result({ results, onBack }) {
                   </div>
                 </div>
 
-                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                  <p className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-1">
-                    Mengapa ini cocok?
-                  </p>
-                  <p className="text-sm text-blue-900 italic">
-                    {laptop.explanation}
-                  </p>
-                </div>
+                <div className="mt-auto pt-4 flex flex-col gap-3">
+                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg h-full flex flex-col justify-center">
+                    <p className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-1">
+                      Mengapa ini cocok?
+                    </p>
+                    <p className="text-sm text-blue-900 italic">
+                      {laptop.explanation}
+                    </p>
+                  </div>
 
-                <div className="mt-auto pt-2">
-                  <a
-                    href={laptop.product_link || "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block w-full text-center border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white font-bold py-2.5 rounded-lg transition-colors"
-                  >
-                    Lihat Detail & Beli
-                  </a>
+                  <div>
+                    <a
+                      href={laptop.product_link || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block w-full text-center border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white font-bold py-2.5 rounded-lg transition-colors"
+                    >
+                      Lihat Detail & Beli
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>

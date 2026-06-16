@@ -5,7 +5,12 @@ import traceback
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from api.recommender import LaptopRecommender
+try:
+    # Mode Production (Dijalankan oleh Vercel dari Root)
+    from api.recommender import LaptopRecommender
+except ModuleNotFoundError:
+    # Mode Development Lokal (Dijalankan oleh Anda dari dalam folder /api)
+    from recommender import LaptopRecommender
 
 app = Flask(__name__)
 # Wajib agar React di localhost:5173 diizinkan mengambil data dari localhost:5000
@@ -62,3 +67,7 @@ def recommend():
         detailed_error = traceback.format_exc()
         print(f"ERROR: {detailed_error}")
         return jsonify({"error": error_msg, "traceback": detailed_error}), 500
+    
+if __name__ == '__main__':
+    print("Menjalankan server Flask secara lokal di port 5000...")
+    app.run(debug=True, port=5000)
