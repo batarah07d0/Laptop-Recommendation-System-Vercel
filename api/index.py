@@ -4,8 +4,8 @@ import traceback
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-# Pastikan nama class/fungsi di bawah ini sesuai dengan yang ada di recommender.py Anda
-from recommender import LaptopRecommender
+
+from api.recommender import LaptopRecommender
 
 app = Flask(__name__)
 # Wajib agar React di localhost:5173 diizinkan mengambil data dari localhost:5000
