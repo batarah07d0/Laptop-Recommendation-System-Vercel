@@ -11,45 +11,51 @@ export default function About({ onNavigate }) {
 
         <div className="space-y-6 text-gray-700 leading-relaxed text-lg mb-12">
           <p>
-            Sistem Rekomendasi Laptop ini dibangun untuk membantu Anda yang
-            merasa kebingungan dengan spesifikasi laptop dan membantu anda untuk
-            menemukan laptop yang paling pas dengan kebutuhan dan kantong Anda.
+            Sistem Rekomendasi Laptop ini dikembangkan untuk membantu Anda
+            menemukan laptop yang paling sesuai berdasarkan kebutuhan spesifik
+            dan anggaran yang dimiliki. Seringkali, pengguna awam menghadapi
+            kesulitan saat memilih laptop karena keterbatasan pemahaman terhadap
+            istilah-istilah teknis perangkat keras (<em>hardware</em>). Sistem
+            ini hadir sebagai solusi praktis untuk menjembatani masalah
+            tersebut.
           </p>
 
           <h3 className="text-xl font-bold text-gray-800 mt-8 mb-3">
             Bagaimana Sistem Ini Membantu Anda?
           </h3>
           <p>
-            Bayangkan sistem ini sebagai seorang{" "}
-            <strong>Sales Toko Komputer yang Pintar dan Jujur</strong>.
-            Alih-alih menyuruh Anda memilih prosesor atau kartu grafis (yang
-            mungkin Anda tidak mengerti), Anda cukup menceritakan kebutuhan Anda
-            kepada kami.
+            Alih-alih menuntut Anda untuk memahami detail teknis seperti jenis
+            prosesor atau kartu grafis secara mendalam, sistem ini bekerja
+            dengan menganalisis narasi kebutuhan yang Anda sampaikan. Anda cukup
+            menceritakan bagaimana laptop tersebut akan digunakan dalam
+            aktivitas sehari-hari.
           </p>
-          <p>
-            Ketikkan saja:{" "}
-            <em>
-              <strong>
-                "Saya butuh laptop buat kuliah, ngetik skripsi, sesekali nonton
-                Netflix, dan tidak terlalu berat kalau dibawa ke kampus."
-              </strong>
-            </em>
-          </p>
+          <div className="bg-gray-50 p-4 rounded-lg border-l-4 border-blue-500 mb-4">
+            <p className="text-sm md:text-base italic text-gray-600">
+              "Saya butuh laptop untuk kebutuhan kuliah teknik, sering
+              menggunakan aplikasi coding, sesekali mengedit video ringan, dan
+              baterainya cukup awet untuk dibawa seharian."
+            </p>
+          </div>
 
           <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 my-6">
-            <h4 className="font-bold text-blue-800 mb-2">3 Langkah Mudah:</h4>
-            <ol className="list-decimal list-inside space-y-2 text-blue-900">
+            <h4 className="font-bold text-blue-800 mb-2">
+              3 Langkah Mudah Penggunaan:
+            </h4>
+            <ol className="list-decimal list-inside space-y-2 text-blue-900 text-sm md:text-base">
               <li>
-                <strong>Ceritakan</strong> kebutuhan Anda dengan jelas.
+                <strong>Sampaikan Kebutuhan:</strong> Tuliskan deskripsi
+                kebutuhan aktivitas Anda pada kolom yang tersedia secara jelas.
               </li>
               <li>
-                <strong>Atur batas</strong> harga dan spesifikasi (jika anda
-                tidak memahami spesifikasi laptop anda bisa memilih pilihan
-                default) yang Anda inginkan.
+                <strong>Sesuaikan Batasan (Opsional):</strong> Atur filter harga
+                maksimal dan preferensi fisik laptop (seperti berat dan ukuran
+                layar) jika Anda memiliki kriteria khusus.
               </li>
               <li>
-                Sistem akan <strong>mencocokkan</strong> kebutuhan Anda dengan
-                ratusan laptop yang ada di database kami secara instan.
+                <strong>Dapatkan Hasil Rekomendasi:</strong> Sistem akan
+                memproses data secara instan dan menampilkan daftar laptop yang
+                paling relevan dengan profil kebutuhan Anda.
               </li>
             </ol>
           </div>
@@ -57,27 +63,30 @@ export default function About({ onNavigate }) {
 
         <hr className="border-gray-200 my-10" />
 
-        <div className="text-center mb-5">
+        <div className="text-center mb-8">
           <h2 className="text-2xl font-extrabold text-gray-900 mb-4">
-            Cara Kerja Kecerdasan Buatan Kami
+            Cara Kerja Sistem Pemilihan Laptop
           </h2>
           <div className="w-24 h-1 bg-purple-600 mx-auto rounded-full"></div>
         </div>
 
-        <div className="space-y-3 text-gray-700 leading-relaxed text-lg">
-          <p>
-            Mungkin Anda bertanya-tanya,{" "}
-            <em>
-              <strong>
-                "Bagaimana mesin ini bisa tahu laptop mana yang cocok dengan
-                kebutuhan saya?"
-              </strong>
-            </em>{" "}
-            <br />
-            Rahasia di baliknya adalah metode{" "}
-            <strong>Content-Based Filtering</strong> yang digerakkan oleh
-            algoritma Pemrosesan Bahasa Alami (NLP) bernama{" "}
-            <strong>TF-IDF</strong> dan <strong>Cosine Similarity</strong>.
+        <div className="space-y-4 text-gray-700 leading-relaxed text-lg">
+          <p className="mb-6">
+            Pencarian rekomendasi pada aplikasi ini tidak dilakukan secara acak.
+            Sistem menerapkan pendekatan{" "}
+            <strong>
+              <em>Content-Based Filtering</em>
+            </strong>{" "}
+            yang dioptimalkan dengan metode Pemrosesan Bahasa Alami (
+            <em>Natural Language Processing</em>), menggunakan algoritma{" "}
+            <strong>
+              <em>TF-IDF</em>
+            </strong>{" "}
+            dan{" "}
+            <strong>
+              <em>Cosine Similarity</em>
+            </strong>
+            .
           </p>
 
           <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
@@ -95,16 +104,13 @@ export default function About({ onNavigate }) {
                   d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
                 ></path>
               </svg>
-              1. Pencocokan Isi (Content-Based Filtering)
+              1. Pencocokan Isi (<em>Content-Based Filtering</em>)
             </h3>
-            <p className="mb-4 text-sm md:text-base">
-              Sistem kami bekerja menggunakan pendekatan{" "}
-              <strong>Content-Based Filtering</strong>. Artinya, mesin akan
-              menganalisis "isi" atau "spesifikasi" dari setiap laptop yang ada
-              di toko. Jika Anda menyukai atau mencari fitur tertentu (misal:
-              memori besar dan anti-lelet), sistem akan menyaring dan
-              merekomendasikan laptop yang memiliki "isi" yang identik dengan
-              permintaan Anda tersebut.
+            <p className="text-sm md:text-base">
+              Sistem menganalisis "isi" atau "spesifikasi" dari setiap laptop
+              yang ada di dalam <em>database</em>. Sistem akan menyaring dan
+              merekomendasikan laptop yang memiliki profil fitur yang paling
+              identik dengan kriteria yang Anda minta pada form pencarian.
             </p>
           </div>
 
@@ -123,16 +129,14 @@ export default function About({ onNavigate }) {
                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                 ></path>
               </svg>
-              2. Membaca Makna Kata (TF-IDF)
+              2. Pembobotan Kata (TF-IDF)
             </h3>
-            <p className="mb-4 text-sm md:text-base">
-              Untuk bisa mencocokkan cerita Anda, mesin harus memahami bahasa
-              manusia. Di sinilah <strong>TF-IDF</strong> bekerja. Sistem tidak
-              sekadar membaca teks, tapi ia menghitung{" "}
-              <strong>bobot kepentingan</strong> dari setiap kata yang Anda
-              ketik. Kata umum seperti "dan" atau "yang" akan diabaikan.
-              Sebaliknya, kata spesifik seperti "Desain", "Skripsi", atau "Game"
-              akan diberi nilai (bobot) yang sangat tinggi.
+            <p className="text-sm md:text-base">
+              Algoritma <em>Term Frequency-Inverse Document Frequency</em>{" "}
+              (TF-IDF) bertugas menganalisis teks yang Anda masukkan,
+              mengabaikan kata hubung umum, dan memberikan bobot nilai yang
+              tinggi pada kata-kata kunci yang krusial (misalnya "Desain", "
+              <em>Coding</em>", atau "<em>Gaming</em>").
             </p>
           </div>
 
@@ -151,20 +155,19 @@ export default function About({ onNavigate }) {
                   d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"
                 ></path>
               </svg>
-              3. Mencari Kemiripan (Cosine Similarity)
+              3. Penghitungan Kemiripan (<em>Cosine Similarity</em>)
             </h3>
             <p className="text-sm md:text-base">
-              Setelah cerita Anda dan ratusan spesifikasi laptop diubah menjadi
-              "angka bobot", mesin menggunakan rumus matematis{" "}
-              <strong>Cosine Similarity</strong>. Rumus ini mengukur seberapa
-              mirip "Angka Kebutuhan Anda" dengan "Angka Spesifikasi Laptop".
-              Laptop dengan persentase kemiripan tertinggi akan dimunculkan ke
-              layar Anda!
+              Setelah kebutuhan dikonversi menjadi angka bobot, algoritma{" "}
+              <em>Cosine Similarity</em>
+              mengukur seberapa mirip "Vektor Kebutuhan Anda" dengan "Vektor
+              Spesifikasi Laptop". Laptop dengan skor kemiripan tertinggi akan
+              diurutkan sebagai rekomendasi utama.
             </p>
           </div>
         </div>
 
-        <div className="text-center mt-5">
+        <div className="text-center mt-10">
           <button
             onClick={() => onNavigate("home")}
             className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-colors"

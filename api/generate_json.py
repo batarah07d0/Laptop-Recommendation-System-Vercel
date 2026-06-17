@@ -5,8 +5,6 @@ import pandas as pd
 
 
 def generate_json():
-    # 1. Pastikan nama file CSV dan path-nya sesuai dengan milik Anda
-    # Karena file CSV Anda ada di folder datasets, kita arahkan ke sana
     csv_path = "datasets/laptop_data_agres.csv"
     
     try:
@@ -18,6 +16,7 @@ def generate_json():
         return
 
     laptops_list = []
+    seen_laptops = set() # Set untuk melacak data duplikat
 
     for index, row in df.iterrows():
         # Fungsi pembantu untuk mencegah error jika ada data kosong (NaN) di CSV
@@ -29,23 +28,43 @@ def generate_json():
                 return val
             return default
 
-        # 2. MAPPING KOLOM (Sudah disesuaikan dengan dataset asli Anda)
+        # Ambil SEMUA variabel kunci spesifikasi untuk mendeteksi duplikat presisi tinggi
+        brand = str(get_val('Brand', 'Unknown'))
+        name = str(get_val('Nama_Display', get_val('Nama', 'Laptop Tanpa Nama')))
+        cpu = str(get_val('CPU', ''))
+        gpu = str(get_val('GPU', ''))
+        ram = str(get_val('RAM', ''))
+        storage = str(get_val('Penyimpanan', get_val('Storage', '')))
+        screen = str(get_val('Screen', get_val('Ukuran_Layar', '')))
+        price = float(get_val('Harga_Numeric', 0))
+        
+        # Membuat sidik jari unik (Identifier) yang SANGAT KETAT
+        identifier = f"{brand}_{name}_{cpu}_{gpu}_{ram}_{storage}_{screen}_{price}".lower().strip()
+        
+        # JIKA SELURUH SPESIFIKASI DI ATAS SAMA PERSIS, MAKA ITU DUPLIKAT
+        if identifier in seen_laptops:
+            print(f"Mengabaikan duplikat identik: {name} (Rp {price:,.0f} | {ram} | {storage})")
+            continue
+            
+        # Jika lolos pengecekan, masukkan ke dalam set pelacakan
+        seen_laptops.add(identifier)
+
+        # 2. MAPPING KOLOM
         laptop = {
-            "id": f"LP{index+1:04d}",
-            "name": str(get_val('Nama_Display', get_val('Nama', 'Laptop Tanpa Nama'))),
-            "brand": str(get_val('Brand', 'Unknown')),
-            "price": float(get_val('Harga_Numeric', 0)),
+            "id": f"LP{len(laptops_list)+1:04d}", 
+            "name": name,
+            "brand": brand,
+            "price": price,
             
-            "cpu": str(get_val('CPU', '')),
+            "cpu": cpu,
             "cpu_type": str(get_val('Tipe_CPU', '')),
-            "gpu": str(get_val('GPU', '')),
+            "gpu": gpu,
             "gpu_type": str(get_val('Tipe_GPU', '')), 
-            "ram": str(get_val('RAM', '')),
-            "storage": str(get_val('Penyimpanan', get_val('Storage', ''))),
+            "ram": ram,
+            "storage": storage,
             "storage_type": str(get_val('Tipe_Penyimpanan', '')),
-            "screen_size": str(get_val('Screen', get_val('Ukuran_Layar', ''))), 
+            "screen_size": screen, 
             
-            # Numeric values untuk logika Slider
             "weight_num": float(get_val('Berat_Numeric', 3.0)), 
             "weight_kg": str(get_val('Berat')), 
             "screen_size_num": float(get_val('Ukuran_Layar_Numeric', 18.0)),
@@ -60,12 +79,12 @@ def generate_json():
         
         laptops_list.append(laptop)
 
-    # 3. Simpan hasilnya ke laptops.json (sejajar dengan script recommender.py)
+    # 3. Simpan hasilnya ke laptops.json
     output_path = "laptops.json"
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(laptops_list, f, indent=4, ensure_ascii=False)
 
-    print(f"Berhasil! {len(laptops_list)} laptop telah di-generate ke {output_path}")
+    print(f"\nBerhasil! {len(laptops_list)} laptop unik telah di-generate ke {output_path}")
 
 if __name__ == "__main__":
     generate_json()

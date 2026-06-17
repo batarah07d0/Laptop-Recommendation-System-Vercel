@@ -8,8 +8,11 @@ export default function App() {
   const [results, setResults] = useState(null);
 
   const navigateTo = (view) => {
+    // Jika user menekan logo "LaptopRec" SAAT sedang di halaman Home, barulah reset pencarian
+    if (view === "home" && currentView === "home") {
+      setResults(null);
+    }
     setCurrentView(view);
-    if (view === "home") setResults(null);
     window.scrollTo(0, 0);
   };
 
