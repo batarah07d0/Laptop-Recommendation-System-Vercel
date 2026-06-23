@@ -5,7 +5,7 @@ import pandas as pd
 
 
 def generate_json():
-    csv_path = "datasets/laptop_data_agres.csv"
+    csv_path = "datasets/laptop_data_agres(final).csv"
     
     try:
         df = pd.read_csv(csv_path)

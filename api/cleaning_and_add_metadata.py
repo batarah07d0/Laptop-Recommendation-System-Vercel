@@ -195,14 +195,20 @@ def generate_tags(row):
     if any(x in nama_laptop for x in ["touch", "x360", "spin", "flip", "2-in-1", "2in1", "yoga", "duo"]):
         tags.extend(["touchscreen", "layar sentuh", "bisa dilipat", "bisa jadi tablet", "buat nggambar", "stylus", "presentasi interaktif", "fleksibel"])
 
+
     # ==========================================
     # USE CASE & KEYWORDS EKSPANSI
     # ==========================================
-    if "gaming berat" in tags: tags.append("cocok gaming")
-    if "multitasking lancar" in tags: tags.append("cocok kerja")
-    if "ringan" in tags or "ultra ringan" in tags: tags.append("mudah dibawa")
-    if "grafis ringan bawaan" in tags: tags.append("cocok office")
-    if "resolusi tinggi" in tags or "layar oled" in tags: tags.append("cocok multimedia")
+    if "gaming berat" in tags:
+        tags.append("cocok gaming")
+    if "multitasking lancar" in tags:
+        tags.append("cocok kerja")
+    if "ringan" in tags or "ultra ringan" in tags:
+        tags.append("mudah dibawa")
+    if "grafis ringan bawaan" in tags:
+        tags.append("cocok office")
+    if "resolusi tinggi" in tags or "layar oled" in tags:
+        tags.append("cocok multimedia")
 
     if any(x in tags for x in ["performa dasar", "performa menengah", "grafis ringan bawaan", "penggunaan ringan"]):
         tags.extend(["nugas", "skripsi", "kuliah", "sekolah", "pelajar", "mahasiswa", "browsing", "internet", "zoom", "meeting", "nonton", "film", "youtube", "word", "excel", "presentasi", "ppt"])
@@ -224,7 +230,245 @@ def generate_tags(row):
 
     return " ".join(dict.fromkeys(tags))
 
+# =========================
+# 4B. AUTO LABELING
+# =========================
+def generate_label(row):
+    labels = []
+
+    cpu = str(row.get('CPU', '')).lower()
+    gpu = str(row.get('GPU', '')).lower()
+    panel = str(row.get('Tipe_Panel_Layar', '')).lower()
+    resolusi = str(row.get('Resolusi_Layar', '')).lower()
+
+    ram = row.get('RAM_Numeric')
+    storage = row.get('Penyimpanan_Numeric')
+    berat = row.get('Berat_Numeric')
+    layar = row.get('Ukuran_Layar_Numeric')
+    harga = row.get('Harga_Numeric')
+
+    # =========================
+    # CPU CLASS
+    # =========================
+    cpu_high = any(x in cpu for x in [
+        'i7', 'i9', 'ultra 7', 'ultra 9',
+        'ryzen 7', 'ryzen 9',
+        'ai 7', 'ai 9',
+        'm3', 'm4', 'm5'
+    ])
+
+    cpu_mid = any(x in cpu for x in [
+        'i5', 'ultra 5',
+        'ryzen 5',
+        'ai 5',
+        'm1', 'm2'
+    ])
+
+    if cpu_high:
+        labels.extend([
+            'performa tinggi',
+            'pekerjaan berat',
+            'multitasking berat'
+        ])
+    elif cpu_mid:
+        labels.extend([
+            'performa menengah',
+            'kerja harian',
+            'multitasking'
+        ])
+    else:
+        labels.extend([
+            'penggunaan ringan',
+            'office',
+            'belajar'
+        ])
+
+    # =========================
+    # GPU CLASS
+    # =========================
+    gpu_dedicated = any(x in gpu for x in [
+        'rtx', 'gtx', 'geforce', 'nvidia', 'rx '
+    ])
+
+    gpu_modern_integrated = any(x in gpu for x in [
+        'iris', 'arc', '680m', '660m', '780m',
+        '840m', '860m', '890m'
+    ])
+
+    if gpu_dedicated:
+        labels.extend([
+            'gaming',
+            'render 3d',
+            'editing video',
+            'desain grafis berat'
+        ])
+    elif gpu_modern_integrated:
+        labels.extend([
+            'gaming ringan',
+            'desain grafis ringan',
+            'edit video ringan'
+        ])
+    else:
+        labels.extend([
+            'office',
+            'browsing',
+            'nonton',
+            'kuliah'
+        ])
+
+    # =========================
+    # RAM
+    # =========================
+    if pd.notna(ram):
+        if ram >= 32:
+            labels.extend([
+                'multitasking ekstrem',
+                'developer',
+                'data science'
+            ])
+        elif ram >= 16:
+            labels.extend([
+                'multitasking lancar',
+                'coding',
+                'kerja kantor'
+            ])
+        elif ram >= 8:
+            labels.extend([
+                'multitasking cukup',
+                'skripsi',
+                'tugas kuliah'
+            ])
+        else:
+            labels.extend([
+                'penggunaan dasar',
+                'pelajar'
+            ])
+
+    # =========================
+    # STORAGE
+    # =========================
+    if pd.notna(storage):
+        if storage >= 1024:
+            labels.extend([
+                'penyimpanan besar',
+                'file besar',
+                'project besar'
+            ])
+        elif storage >= 512:
+            labels.extend([
+                'penyimpanan cukup besar',
+                'dokumen kerja',
+                'aplikasi produktivitas'
+            ])
+        else:
+            labels.extend([
+                'penyimpanan standar'
+            ])
+
+    # =========================
+    # MOBILITY
+    # =========================
+    if pd.notna(berat):
+        if berat <= 1.5:
+            labels.extend([
+                'ringan',
+                'mudah dibawa',
+                'mobilitas tinggi',
+                'dibawa ke kampus',
+                'dibawa bekerja'
+            ])
+        elif berat <= 2.0:
+            labels.extend([
+                'berat sedang',
+                'masih nyaman dibawa'
+            ])
+        else:
+            labels.extend([
+                'berat',
+                'lebih cocok penggunaan di meja'
+            ])
+
+    # =========================
+    # SCREEN
+    # =========================
+    if pd.notna(layar):
+        if layar >= 16:
+            labels.extend([
+                'layar besar',
+                'desain',
+                'editing',
+                'multimedia'
+            ])
+        elif layar >= 14:
+            labels.extend([
+                'layar standar',
+                'produktif',
+                'kuliah'
+            ])
+        else:
+            labels.extend([
+                'layar compact',
+                'portable'
+            ])
+
+    if 'oled' in panel:
+        labels.extend([
+            'layar oled',
+            'warna akurat',
+            'desainer',
+            'nonton film'
+        ])
+    elif 'ips' in panel:
+        labels.extend([
+            'layar bagus',
+            'warna cukup akurat'
+        ])
+    elif 'mini led' in panel:
+        labels.extend([
+            'layar premium',
+            'warna tajam'
+        ])
+
+    if any(x in resolusi for x in ['4k', 'uhd', '3k', '2.8k', '2560']):
+        labels.extend([
+            'resolusi tinggi',
+            'visual tajam',
+            'konten kreator'
+        ])
+
+    # =========================
+    # PRICE CLASS
+    # =========================
+    if pd.notna(harga):
+        if harga <= 6500000:
+            labels.extend([
+                'murah',
+                'budget',
+                'ramah kantong',
+                'entry level'
+            ])
+        elif harga <= 12000000:
+            labels.extend([
+                'harga menengah',
+                'value for money'
+            ])
+        elif harga <= 20000000:
+            labels.extend([
+                'premium',
+                'profesional'
+            ])
+        else:
+            labels.extend([
+                'flagship',
+                'spek tinggi',
+                'investasi jangka panjang'
+            ])
+
+    # Hapus duplikasi kata/frasa
+    return " ".join(dict.fromkeys(labels))
+
 df['Auto_Tag'] = df.apply(generate_tags, axis=1)
+df['Label'] = df.apply(generate_label, axis=1)
 
 # =========================
 # 5. HELPER
@@ -258,22 +502,27 @@ def build_metadata(row):
     parts = []
 
     parts.extend([
-        str(row['Brand']),
-        str(row['Nama_Display']),
-        str(row['CPU']),
-        str(row['GPU'])
+        str(row.get('Brand', '')),
+        str(row.get('Nama_Display', '')),
+        str(row.get('CPU', '')),
+        str(row.get('GPU', ''))
     ])
 
-    gpu = str(row['GPU']).lower()
-    if "apple" in gpu: parts.append("grafis apple")
-    elif any(x in gpu for x in ["uhd", "iris", "intel", "integrated"]): parts.append("grafis terintegrasi")
+    gpu = str(row.get('GPU', '')).lower()
+    if "apple" in gpu:
+        parts.append("grafis apple")
+    elif any(x in gpu for x in ["uhd", "iris", "intel", "integrated"]):
+        parts.append("grafis terintegrasi")
 
-    parts.append(format_ram(row['RAM_Numeric']))
-    parts.append(format_storage(row['Penyimpanan_Numeric']))
-    parts.append(format_layar(row['Ukuran_Layar_Numeric']))
+    parts.append(format_ram(row.get('RAM_Numeric')))
+    parts.append(format_storage(row.get('Penyimpanan_Numeric')))
+    parts.append(format_layar(row.get('Ukuran_Layar_Numeric')))
 
-    parts.append(row['Auto_Tag'])
-    parts.append(simplify_label(row['Label']))
+    parts.append(str(row.get('Auto_Tag', '')))
+    parts.append(simplify_label(row.get('Label', '')))
+
+    # Pastikan tidak ada None/NaN/kosong masuk ke join()
+    parts = [str(p) for p in parts if pd.notna(p) and str(p).strip() != ""]
 
     text = " ".join(parts)
     text = clean_text(text)
@@ -288,4 +537,4 @@ df['Metadata'] = df.apply(build_metadata, axis=1)
 # =========================
 df.to_excel("datasets/laptop_data_agres_with_metadata.xlsx", index=False)
 
-print("✅ FINAL: Metadata sudah berhasil diterapkan dan disimpan!")
+print("FINAL: Metadata sudah berhasil diterapkan dan disimpan!")
