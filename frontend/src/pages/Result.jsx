@@ -6,16 +6,23 @@ export default function Result({ results, onBack }) {
   // State untuk mengontrol buka/tutup custom dropdown
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Logika untuk mengurutkan data sebelum ditampilkan
-  const sortedData = results.data
-    ? [...results.data].sort((a, b) => {
-        if (sortBy === "harga") {
-          return (a.price || 0) - (b.price || 0); // Urutkan Harga dari Termurah ke Termahal
-        }
-        // Default: Urutkan berdasarkan Skor Kemiripan (Rekomendasi Tertinggi)
-        return (b.similarity_score || 0) - (a.similarity_score || 0);
-      })
+  // Simpan peringkat asli berdasarkan hasil model sebelum pengguna melakukan sorting.
+  const rankedData = results.data
+    ? results.data.map((item, index) => ({
+        ...item,
+        recommendation_rank: index + 1,
+      }))
     : [];
+
+  // Logika untuk mengurutkan data sebelum ditampilkan.
+  const sortedData = [...rankedData].sort((a, b) => {
+    if (sortBy === "harga") {
+      return (a.price || 0) - (b.price || 0); // Termurah ke termahal
+    }
+
+    // Default: urutkan berdasarkan skor Cosine Similarity tertinggi.
+    return (b.similarity_score || 0) - (a.similarity_score || 0);
+  });
 
   // Daftar opsi sorting untuk memudahkan rendering custom dropdown
   const sortOptions = [
@@ -42,8 +49,8 @@ export default function Result({ results, onBack }) {
           <div>
             <p className="text-base text-blue-800 font-bold">
               {results.strict_count === 0
-                ? "Mohon Maaf, kami tidak menemukan laptop yang 100% cocok dengan filter Spesifikasi Anda."
-                : `Kami hanya menemukan ${results.strict_count} laptop yang cocok dengan filter Spesifikasi Anda.`}
+                ? "Mohon maaf, kami tidak menemukan laptop yang memenuhi seluruh filter spesifikasi Anda."
+                : `Kami hanya menemukan ${results.strict_count} laptop yang memenuhi seluruh filter spesifikasi Anda.`}
             </p>
             <p className="text-sm text-blue-700 mt-1">
               Sistem otomatis menampilkan <strong>Rekomendasi Terdekat</strong>{" "}
@@ -204,7 +211,7 @@ export default function Result({ results, onBack }) {
                         clipRule="evenodd"
                       ></path>
                     </svg>
-                    Cocok: {((laptop.similarity_score || 0) * 100).toFixed(1)}%
+                    Rekomendasi #{laptop.recommendation_rank}
                   </span>
                 </div>
 
@@ -279,26 +286,15 @@ export default function Result({ results, onBack }) {
                   </div>
                 </div>
 
-                <div className="mt-auto pt-4 flex flex-col gap-3">
-                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg h-full flex flex-col justify-center">
-                    <p className="text-sm font-bold text-blue-800 uppercase tracking-wider mb-1">
-                      Mengapa ini cocok?
-                    </p>
-                    <p className="text-sm text-blue-900 italic">
-                      {laptop.explanation}
-                    </p>
-                  </div>
-
-                  <div>
-                    <a
-                      href={laptop.product_link || "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block w-full text-center border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white font-bold py-2.5 rounded-lg transition-colors"
-                    >
-                      Lihat Detail & Beli
-                    </a>
-                  </div>
+                <div className="mt-auto pt-4">
+                  <a
+                    href={laptop.product_link || "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block w-full text-center border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white font-bold py-2.5 rounded-lg transition-colors"
+                  >
+                    Lihat Detail & Beli
+                  </a>
                 </div>
               </div>
             </div>
@@ -414,9 +410,9 @@ export default function Result({ results, onBack }) {
               Bagaimana Pengalaman Anda?
             </h3>
             <p className="text-gray-600 mb-8 max-w-2xl mx-auto md:text-lg">
-              Apakah hasil rekomendasi laptop di atas sesuai dengan harapan
-              Anda? Mohon luangkan waktu <strong>2-5 menit</strong> untuk
-              mengisi kuesioner evaluasi sistem.
+              Mohon luangkan waktu <strong>2-5 menit</strong> untuk mengisi
+              kuesioner mengenai pengalaman penggunaan dan kemudahan menggunakan
+              sistem.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <a

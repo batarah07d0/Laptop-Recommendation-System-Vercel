@@ -1,0 +1,7 @@
+Nilai k dengan F1-Score tertinggi: 18
+Rata-rata Precision: 0.787037
+Rata-rata Recall: 0.592546
+Rata-rata F1-Score: 0.599353
+Jumlah skenario fallback: 0
+
+Catatan: nilai ini adalah yang terbaik pada rentang k dan skenario yang diuji, bukan nilai optimal secara universal.

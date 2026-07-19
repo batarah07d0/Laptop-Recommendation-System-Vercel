@@ -1,0 +1,31 @@
+﻿k,scenario_id,scenario_name,ground_truth_count,returned_count,true_positive,precision,recall,f1,strict_count,relaxed_count,is_fallback
+6,S1,"Kuliah, skripsi, coding, dan game ringan",22,6,6,1.0,0.2727272727272727,0.42857142857142855,63,0,False
+6,S2,Laptop murah untuk kuliah dan office,6,6,4,0.6666666666666666,0.6666666666666666,0.6666666666666666,8,0,False
+6,S3,Gaming berat dan rendering,21,6,6,1.0,0.2857142857142857,0.4444444444444445,27,0,False
+6,S4,Desain grafis dan konten kreator,50,6,5,0.8333333333333334,0.1,0.17857142857142858,30,0,False
+6,S5,Mobilitas tinggi untuk kerja dan kampus,31,6,2,0.3333333333333333,0.06451612903225806,0.1081081081081081,50,0,False
+6,S6,Programming dan data science,61,6,6,1.0,0.09836065573770492,0.1791044776119403,79,0,False
+10,S1,"Kuliah, skripsi, coding, dan game ringan",22,10,9,0.9,0.4090909090909091,0.5625000000000001,63,0,False
+10,S2,Laptop murah untuk kuliah dan office,6,8,6,0.6,1.0,0.7499999999999999,8,0,False
+10,S3,Gaming berat dan rendering,21,10,10,1.0,0.47619047619047616,0.6451612903225806,27,0,False
+10,S4,Desain grafis dan konten kreator,50,10,9,0.9,0.18,0.3,30,0,False
+10,S5,Mobilitas tinggi untuk kerja dan kampus,31,10,3,0.3,0.0967741935483871,0.14634146341463414,50,0,False
+10,S6,Programming dan data science,61,10,10,1.0,0.16393442622950818,0.28169014084507044,79,0,False
+12,S1,"Kuliah, skripsi, coding, dan game ringan",22,12,11,0.9166666666666666,0.5,0.6470588235294118,63,0,False
+12,S2,Laptop murah untuk kuliah dan office,6,8,6,0.5,1.0,0.6666666666666666,8,0,False
+12,S3,Gaming berat dan rendering,21,12,12,1.0,0.5714285714285714,0.7272727272727273,27,0,False
+12,S4,Desain grafis dan konten kreator,50,12,11,0.9166666666666666,0.22,0.3548387096774193,30,0,False
+12,S5,Mobilitas tinggi untuk kerja dan kampus,31,12,4,0.3333333333333333,0.12903225806451613,0.18604651162790697,50,0,False
+12,S6,Programming dan data science,61,12,12,1.0,0.19672131147540983,0.3287671232876712,79,0,False
+15,S1,"Kuliah, skripsi, coding, dan game ringan",22,15,14,0.9333333333333333,0.6363636363636364,0.7567567567567568,63,0,False
+15,S2,Laptop murah untuk kuliah dan office,6,8,6,0.4,1.0,0.5714285714285715,8,0,False
+15,S3,Gaming berat dan rendering,21,15,15,1.0,0.7142857142857143,0.8333333333333333,27,0,False
+15,S4,Desain grafis dan konten kreator,50,15,14,0.9333333333333333,0.28,0.4307692307692308,30,0,False
+15,S5,Mobilitas tinggi untuk kerja dan kampus,31,15,6,0.4,0.1935483870967742,0.26086956521739135,50,0,False
+15,S6,Programming dan data science,61,15,15,1.0,0.2459016393442623,0.3947368421052631,79,0,False
+18,S1,"Kuliah, skripsi, coding, dan game ringan",22,18,17,0.9444444444444444,0.7727272727272727,0.85,63,0,False
+18,S2,Laptop murah untuk kuliah dan office,6,8,6,0.3333333333333333,1.0,0.5,8,0,False
+18,S3,Gaming berat dan rendering,21,18,18,1.0,0.8571428571428571,0.923076923076923,27,0,False
+18,S4,Desain grafis dan konten kreator,50,18,17,0.9444444444444444,0.34,0.5,30,0,False
+18,S5,Mobilitas tinggi untuk kerja dan kampus,31,18,9,0.5,0.2903225806451613,0.3673469387755102,50,0,False
+18,S6,Programming dan data science,61,18,18,1.0,0.29508196721311475,0.4556962025316456,79,0,False

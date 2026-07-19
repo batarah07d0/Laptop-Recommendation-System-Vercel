@@ -128,7 +128,7 @@ export default function Home({ onSearchResults }) {
               <span>
                 {showAdvanced
                   ? "Sembunyikan Filter Spesifikasi Lanjutan"
-                  : "Tampilkan Filter Spesifikasi Lanjutan (Jika Memahami Spesifikasi Laptop Dengan Baik)"}
+                  : "Tampilkan Filter Spesifikasi Lanjutan"}
               </span>
             </button>
           </div>
@@ -310,7 +310,7 @@ export default function Home({ onSearchResults }) {
                   <div className="relative">
                     <label className="flex items-center text-sm font-semibold text-gray-700 mb-2">
                       Tipe Kartu Grafis (GPU){" "}
-                      <InfoTooltip text="Pilih 'Dedicated' (seperti NVIDIA RTX) jika laptop akan digunakan untuk main game berat atau editing video profesional. Jika bingung, biarkan di Pilihan Semua Tipe GPU!" />
+                      <InfoTooltip text="Pilih Integrated untuk grafis yang menyatu dengan prosesor, atau Dedicated untuk kartu grafis terpisah seperti NVIDIA GeForce RTX/GTX dan AMD Radeon RX. Jika bingung, pilih Semua Tipe GPU." />
                     </label>
                     <select
                       value={gpuType}
@@ -319,10 +319,10 @@ export default function Home({ onSearchResults }) {
                     >
                       <option value="All">Semua Tipe GPU</option>
                       <option value="Integrated">
-                        Integrated (Irit Baterai)
+                        Integrated (Grafis Terintegrasi)
                       </option>
                       <option value="Dedicated">
-                        Dedicated (Performa Tinggi)
+                        Dedicated (Grafis Terpisah)
                       </option>
                     </select>
                   </div>

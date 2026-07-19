@@ -1,0 +1,1245 @@
+%-----------------------------------------------------------------------------%
+\chapter{\babTiga}
+%-----------------------------------------------------------------------------%
+Bab ini menjelaskan metodologi penelitian yang digunakan dalam pengembangan sistem rekomendasi pemilihan laptop. Tahapan penelitian dimulai dari studi pustaka, pengumpulan data, penyiapan dataset, preprocessing data dan pembentukan metadata, pengembangan model rekomendasi, implementasi sistem, pengujian relevansi rekomendasi, hingga pengujian usability menggunakan \textit{System Usability Scale} (SUS). Alur tahapan penelitian ditunjukkan pada Gambar~\ref{fig:alur_penelitian}.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[height=0.48\textheight, keepaspectratio]{assets/pics/Diagram/alur_penelitian.png}
+\caption{Alur Tahapan Penelitian}
+\label{fig:alur_penelitian}
+\end{figure}
+
+Gambar~\ref{fig:alur_penelitian} menunjukkan bahwa penelitian ini tidak hanya berfokus pada pembangunan aplikasi, tetapi juga pada proses pengolahan data, pembentukan metadata, pengembangan model rekomendasi, dan evaluasi hasil sistem. Data laptop yang telah dikumpulkan disiapkan melalui proses pembersihan data, ekstraksi atribut, pembentukan \textit{auto-tag}, pembentukan label, dan pembentukan metadata. Metadata tersebut kemudian digunakan sebagai korpus dokumen pada model rekomendasi berbasis TF-IDF dan \textit{Cosine Similarity}. Hasil rekomendasi disajikan dalam bentuk \textit{Top-6} laptop dan dievaluasi dari sisi relevansi menggunakan \textit{Precision@6}, \textit{Recall@6}, dan \textit{F1-Score@6}, serta dari sisi usability menggunakan kuesioner SUS.
+
+Pada penelitian ini, pengolahan teks dilakukan dalam dua tahap. Tahap pertama adalah preprocessing data dan pembentukan metadata, yaitu proses menyiapkan data laptop mentah menjadi metadata yang siap digunakan sebagai representasi dokumen. Tahap kedua adalah preprocessing teks pada model rekomendasi, yaitu proses menyiapkan metadata laptop dan query pengguna menjadi daftar term sebelum dihitung menggunakan TF-IDF. Dengan demikian, metadata tidak dibentuk dua kali, melainkan dibentuk satu kali kemudian diproses kembali sebagai input pembobotan TF-IDF.
+
+%-----------------------------------------------------------------------------%
+\section{Pengumpulan Data}
+%-----------------------------------------------------------------------------%
+Pengumpulan data dilakukan untuk memperoleh informasi produk laptop yang akan digunakan sebagai dataset dalam sistem rekomendasi. Data yang digunakan pada penelitian ini merupakan data sekunder berupa informasi produk laptop yang tersedia secara publik pada halaman produk Agres.id. Data tersebut digunakan sebagai dasar dalam pembentukan dataset laptop, preprocessing data, pembentukan metadata, dan proses rekomendasi.
+
+Pengumpulan data dilakukan secara terbatas untuk kepentingan akademik. Data yang dikumpulkan hanya mencakup informasi produk, seperti nama laptop, merek, harga, spesifikasi perangkat, tautan produk, dan gambar produk. Penelitian ini tidak menggunakan data pribadi pengguna, data transaksi, data akun, riwayat pembelian, maupun informasi internal dari platform sumber data. Data yang digunakan juga bersifat \textit{snapshot}, sehingga harga, stok, dan informasi produk dapat berubah sewaktu-waktu sesuai kondisi pada platform sumber.
+
+%-----------------------------------------------------------------------------%
+\subsection{Sumber Data}
+%-----------------------------------------------------------------------------%
+Sumber data pada penelitian ini berasal dari halaman produk laptop yang tersedia secara publik pada website Agres.id. Website tersebut menyediakan informasi produk laptop, seperti nama produk, harga, spesifikasi prosesor, kartu grafis, RAM, penyimpanan, layar, sistem operasi, berat perangkat, gambar produk, dan tautan produk.
+
+Data yang digunakan tidak berasal dari basis data internal Agres.id, melainkan dari informasi produk yang dapat diakses secara publik melalui halaman produk. Oleh karena itu, dataset pada penelitian ini diposisikan sebagai data sekunder yang digunakan untuk kebutuhan akademik dan pengujian sistem rekomendasi.
+
+%-----------------------------------------------------------------------------%
+\subsection{Teknik Pengumpulan Data}
+%-----------------------------------------------------------------------------%
+Teknik pengumpulan data dilakukan menggunakan metode \textit{web scraping}. Proses ini digunakan untuk mengambil informasi produk laptop dari halaman produk yang telah ditentukan. Pengumpulan data dilakukan dengan membaca daftar URL produk, mengakses halaman produk secara otomatis menggunakan program Python, membaca struktur halaman web, mengekstraksi atribut produk, dan menyimpan hasil pengambilan data ke dalam file dataset.
+
+Alur pengumpulan data laptop ditunjukkan pada Gambar~\ref{fig:alur_pengumpulan_data}. Diagram tersebut digunakan untuk memperjelas tahapan pengambilan data produk laptop dari halaman web hingga menjadi dataset yang siap diproses pada tahap berikutnya.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[height=0.48\textheight, keepaspectratio]{assets/pics/Diagram/alur_pengumpulan_data.png}
+\caption{Alur Pengumpulan Data Laptop}
+\label{fig:alur_pengumpulan_data}
+\end{figure}
+
+Berdasarkan Gambar~\ref{fig:alur_pengumpulan_data}, proses pengumpulan data diawali dengan membaca daftar URL produk laptop dari file teks yang telah disiapkan. Pada penelitian ini, daftar URL produk disimpan dalam file teks dan proses pengambilan data dapat dilakukan secara bertahap. Oleh karena itu, sistem memeriksa dataset lama untuk menghindari pengambilan data dari URL yang sudah tersimpan. Setiap URL yang belum tersedia pada dataset kemudian diakses menggunakan program Python, lalu struktur halaman web dibaca untuk memperoleh data produk dalam format JSON-LD serta teks spesifikasi produk.
+
+Data hasil ekstraksi selanjutnya digabungkan dengan dataset lama. Untuk menghindari data ganda akibat proses pengumpulan data bertahap atau kemungkinan URL yang sama muncul pada lebih dari satu daftar tautan, dilakukan penghapusan duplikasi berdasarkan kolom \texttt{Product\_URL}. Dataset akhir kemudian disimpan dalam format Excel untuk digunakan pada tahap preprocessing data dan pembentukan metadata.
+
+Potongan kode utama pada tahap pengumpulan data ditunjukkan pada Kode~\ref{kode:scraping_produk_agres}. Kode tersebut digunakan untuk mengakses halaman produk, membaca data JSON-LD bertipe \texttt{Product}, mengekstraksi atribut produk, serta mengembalikan data hasil ekstraksi dalam bentuk struktur \textit{dictionary}.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Pengambilan Data Produk dari Halaman Agres.id}, label=kode:scraping_produk_agres]
+def scrape_product(url):
+    response = session.get(url, headers=HEADERS, timeout=(10, 30))
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    product_json = None
+
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string)
+            if isinstance(data, dict) and data.get("@type") == "Product":
+                product_json = data
+                break
+        except:
+            pass
+
+    if not product_json:
+        return None
+
+    spec_text = soup.get_text("\n", strip=True)
+
+    nama = clean_text(product_json.get("name", ""))
+    harga_numeric = int(float(product_json["offers"]["price"]))
+    harga_rupiah = f"Rp {harga_numeric:,}".replace(",", ".")
+
+    image_data = product_json.get("image", [])
+    image_url = image_data[0] if isinstance(image_data, list) and image_data else ""
+
+    brand = extract_field(spec_text, "Brand")
+    if not brand:
+        brand = nama.split()[0].upper()
+
+    cpu = extract_field(spec_text, "Processor")
+    gpu = extract_field(spec_text, "Graphics")
+    ram = extract_field(spec_text, "RAM")
+    storage = extract_field(spec_text, "Storage")
+    layar = extract_field(spec_text, "Main Display Size")
+    panel = extract_field(spec_text, "Main Display Type")
+    resolusi = extract_field(spec_text, "Display Resolution")
+    os_system = extract_field(spec_text, "Operating System")
+    berat, berat_numeric = extract_weight(spec_text)
+
+    return {
+        "Nama": nama,
+        "Nama_Display": nama,
+        "Brand": brand,
+        "Harga_Rupiah": harga_rupiah,
+        "Harga_Numeric": harga_numeric,
+        "Sistem_Operasi": os_system,
+        "GPU": gpu,
+        "Tipe_GPU": get_gpu_type(gpu),
+        "CPU": cpu,
+        "Tipe_CPU": get_cpu_type(cpu),
+        "RAM": ram,
+        "RAM_Numeric": extract_ram_numeric(ram),
+        "Tipe_RAM": get_ram_type(ram),
+        "Penyimpanan": storage,
+        "Penyimpanan_Numeric": extract_storage_numeric(storage),
+        "Tipe_Penyimpanan": get_storage_type(storage),
+        "Berat": berat,
+        "Berat_Numeric": berat_numeric,
+        "Ukuran_Layar": layar,
+        "Ukuran_Layar_Numeric": extract_screen_numeric(layar),
+        "Tipe_Panel_Layar": panel,
+        "Resolusi_Layar": resolusi,
+        "Deskripsi": spec_text,
+        "Product_URL": url,
+        "Image_URL": image_url,
+        "Kategori": "Laptop"
+    }
+\end{lstlisting}
+
+Setelah proses ekstraksi selesai, data baru digabungkan dengan dataset lama. Duplikasi data dihapus berdasarkan kolom \texttt{Product\_URL}, kemudian dataset akhir disimpan dalam format Excel untuk digunakan pada tahap preprocessing data dan pembentukan metadata.
+
+%-----------------------------------------------------------------------------%
+\subsection{Atribut Data yang Dikumpulkan}
+%-----------------------------------------------------------------------------%
+Atribut data yang dikumpulkan disesuaikan dengan kebutuhan sistem rekomendasi laptop. Atribut tersebut digunakan untuk merepresentasikan karakteristik setiap laptop, baik dalam bentuk atribut numerik, atribut kategorikal, maupun atribut teks.
+
+\noindent Atribut yang dikumpulkan pada penelitian ini meliputi:
+\begin{enumerate}
+\item \textbf{Nama produk}, yaitu nama laptop sebagaimana ditampilkan pada halaman produk.
+\item \textbf{Merek}, yaitu brand atau produsen laptop.
+\item \textbf{Harga}, yaitu harga produk dalam satuan Rupiah.
+\item \textbf{Prosesor}, yaitu informasi CPU yang digunakan pada laptop.
+\item \textbf{Kartu grafis}, yaitu informasi GPU yang digunakan pada laptop.
+\item \textbf{RAM}, yaitu kapasitas memori utama laptop.
+\item \textbf{Penyimpanan}, yaitu kapasitas dan jenis media penyimpanan.
+\item \textbf{Ukuran layar}, yaitu ukuran layar laptop dalam satuan inci.
+\item \textbf{Resolusi layar}, yaitu kualitas atau resolusi layar yang tersedia.
+\item \textbf{Tipe panel layar}, yaitu jenis panel layar seperti IPS, OLED, atau tipe panel lainnya.
+\item \textbf{Berat perangkat}, yaitu berat laptop dalam satuan kilogram.
+\item \textbf{Sistem operasi}, yaitu sistem operasi yang tersedia pada laptop.
+\item \textbf{Tautan produk}, yaitu URL halaman produk asli.
+\item \textbf{Gambar produk}, yaitu URL gambar produk yang digunakan untuk menampilkan visual laptop pada sistem.
+\end{enumerate}
+
+Atribut-atribut tersebut selanjutnya melalui tahap preprocessing data untuk menghasilkan atribut numerik, atribut kategorikal, \textit{auto-tag}, label, dan metadata laptop. Metadata inilah yang digunakan sebagai representasi teks utama dalam proses rekomendasi berbasis TF-IDF dan \textit{Cosine Similarity}.
+
+%-----------------------------------------------------------------------------%
+\section{Penyiapan Dataset Laptop}
+%-----------------------------------------------------------------------------%
+Dataset laptop merupakan hasil pengolahan data produk yang telah dikumpulkan dari halaman produk publik Agres.id. Dataset ini digunakan sebagai sumber utama dalam proses pembentukan metadata dan perhitungan rekomendasi. Setiap data laptop merepresentasikan satu produk laptop dengan atribut spesifikasi tertentu.
+
+Pada penelitian ini, dataset yang digunakan terdiri dari 111 produk laptop. Setiap produk memiliki informasi yang berkaitan dengan identitas produk, harga, spesifikasi utama, karakteristik fisik, tampilan layar, tautan produk, gambar produk, serta metadata penggunaan. Dataset ini kemudian disimpan dalam format JSON agar dapat digunakan oleh sistem rekomendasi pada sisi backend.
+
+Penggunaan format JSON bertujuan untuk mempermudah proses pembacaan data oleh sistem berbasis web. Data laptop yang telah disimpan dalam format JSON dimuat oleh backend dan diproses sebagai korpus dokumen dalam model rekomendasi. Dengan demikian, setiap laptop dapat direpresentasikan sebagai dokumen teks yang berisi informasi spesifikasi dan metadata penggunaan.
+
+%-----------------------------------------------------------------------------%
+\subsection{Atribut Dataset}
+%-----------------------------------------------------------------------------%
+Atribut dataset disusun berdasarkan kebutuhan sistem rekomendasi laptop. Atribut tersebut tidak hanya digunakan untuk menampilkan informasi produk kepada pengguna, tetapi juga digunakan dalam proses penyaringan, pembentukan metadata, dan perhitungan rekomendasi.
+
+\noindent Atribut utama yang digunakan dalam dataset laptop adalah sebagai berikut:
+\begin{enumerate}
+\item \textbf{ID laptop}, yaitu kode unik yang digunakan untuk membedakan setiap data laptop dalam sistem.
+\item \textbf{Nama laptop}, yaitu nama produk laptop sebagaimana ditampilkan pada halaman produk sumber.
+\item \textbf{Merek}, yaitu brand atau produsen laptop.
+\item \textbf{Harga}, yaitu harga produk dalam satuan Rupiah yang digunakan sebagai salah satu filter terstruktur.
+\item \textbf{CPU}, yaitu informasi prosesor yang digunakan pada laptop.
+\item \textbf{Tipe CPU}, yaitu kategori prosesor berdasarkan produsen atau jenis prosesor, seperti Intel, AMD, Apple, atau Qualcomm.
+\item \textbf{GPU}, yaitu informasi kartu grafis atau grafis bawaan yang digunakan pada laptop.
+\item \textbf{Tipe GPU}, yaitu kategori kartu grafis berdasarkan produsen, seperti NVIDIA, AMD, Intel, atau Apple.
+\item \textbf{RAM}, yaitu kapasitas memori utama laptop.
+\item \textbf{Penyimpanan}, yaitu informasi kapasitas dan jenis media penyimpanan laptop.
+\item \textbf{Ukuran layar}, yaitu ukuran layar laptop dalam satuan inci.
+\item \textbf{Berat perangkat}, yaitu berat laptop dalam satuan kilogram.
+\item \textbf{Sistem operasi}, yaitu sistem operasi yang tersedia pada laptop.
+\item \textbf{Resolusi layar}, yaitu kualitas atau resolusi tampilan layar.
+\item \textbf{Tipe panel layar}, yaitu jenis panel layar seperti IPS, OLED, TN, atau Mini LED.
+\item \textbf{Metadata penggunaan}, yaitu representasi teks yang berisi gabungan atribut spesifikasi, kata kunci penggunaan, hasil \textit{auto-tagging}, dan label. Metadata ini digunakan sebagai korpus dokumen dalam proses pembobotan TF-IDF.
+\item \textbf{Tautan produk}, yaitu URL halaman produk asli yang dapat digunakan pengguna untuk melihat informasi produk secara lebih lengkap.
+\item \textbf{Gambar produk}, yaitu URL gambar laptop yang digunakan untuk menampilkan visual produk pada antarmuka sistem.
+\end{enumerate}
+
+Atribut harga, berat, ukuran layar, RAM, dan penyimpanan digunakan sebagai atribut pendukung untuk proses penyaringan. Sementara itu, atribut spesifikasi seperti CPU, GPU, RAM, penyimpanan, layar, serta metadata penggunaan digunakan untuk membentuk representasi laptop dalam proses rekomendasi berbasis konten.
+
+%-----------------------------------------------------------------------------%
+\subsection{Struktur Dataset JSON}
+%-----------------------------------------------------------------------------%
+Setelah melalui proses preprocessing dan pembentukan metadata, dataset laptop disimpan dalam format JSON. Setiap objek dalam file JSON merepresentasikan satu produk laptop. Format ini dipilih karena mudah dibaca oleh sistem backend dan dapat langsung digunakan dalam proses rekomendasi.
+
+\noindent Struktur data laptop dalam format JSON secara umum ditunjukkan sebagai berikut:
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Struktur Data Laptop dalam Format JSON}, label=kode:struktur_json_laptop]
+{
+"id": "LP0001",
+"name": "Nama Laptop",
+"brand": "Brand Laptop",
+"price": 10000000,
+"cpu": "Spesifikasi CPU",
+"cpu_type": "Tipe CPU",
+"gpu": "Spesifikasi GPU",
+"gpu_type": "Tipe GPU",
+"ram": "Kapasitas RAM",
+"storage": "Kapasitas Penyimpanan",
+"storage_type": "Tipe Penyimpanan",
+"screen_size": "Ukuran Layar",
+"weight_num": 1.5,
+"weight_kg": "1.5 kg",
+"screen_size_num": 14.0,
+"os": "Sistem Operasi",
+"screen_quality": "Resolusi Layar",
+"panel_type": "Tipe Panel Layar",
+"usage": "Metadata laptop",
+"product_link": "URL Produk",
+"image_url": "URL Gambar Produk"
+}
+\end{lstlisting}
+
+Field \texttt{usage} merupakan atribut penting dalam sistem rekomendasi karena berisi metadata laptop yang digunakan sebagai dokumen teks. Metadata tersebut kemudian diproses melalui tahap preprocessing teks, pembobotan TF-IDF, normalisasi vektor, dan perhitungan \textit{Cosine Similarity}. Dengan demikian, field \texttt{usage} menjadi dasar utama dalam pengukuran kemiripan antara kebutuhan pengguna dan karakteristik laptop.
+
+Pembentukan file JSON dilakukan setelah dataset final terbentuk. Pada proses ini, setiap laptop diberi ID unik dengan format \texttt{LP0001}, \texttt{LP0002}, dan seterusnya. Selain itu, sistem melakukan pengecekan duplikasi berdasarkan kombinasi merek, nama laptop, CPU, GPU, RAM, penyimpanan, ukuran layar, dan harga.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Pembentukan ID dan Data JSON Laptop}, label=kode:pembentukan_json_laptop]
+identifier = f"{brand}_{name}_{cpu}_{gpu}_{ram}_{storage}_{screen}_{price}"
+identifier = identifier.lower().strip()
+
+if identifier in seen_laptops:
+    continue
+seen_laptops.add(identifier)
+
+laptop = {
+    "id": f"LP{len(laptops_list)+1:04d}",
+    "name": name,
+    "brand": brand,
+    "price": price,
+    "usage": str(get_val('Metadata', ''))
+}
+\end{lstlisting}
+
+Selain digunakan dalam proses rekomendasi, beberapa atribut lain juga digunakan untuk mendukung tampilan antarmuka dan fitur filter. Misalnya, atribut \texttt{price} digunakan untuk membatasi rekomendasi berdasarkan harga maksimal, atribut \texttt{weight\_num} digunakan untuk filter berat perangkat, dan atribut \texttt{screen\_size\_num} digunakan untuk filter ukuran layar. Atribut \texttt{product\_link} digunakan untuk mengarahkan pengguna ke halaman produk asli apabila pengguna ingin melihat informasi produk secara lebih lengkap.
+
+%-----------------------------------------------------------------------------%
+\section{Preprocessing Data dan Pembentukan Metadata}
+%-----------------------------------------------------------------------------%
+Tahap preprocessing data dan pembentukan metadata dilakukan untuk mengubah data laptop mentah hasil pengumpulan menjadi representasi yang lebih terstruktur dan siap digunakan dalam sistem rekomendasi. Data awal yang diperoleh dari halaman produk publik masih memiliki variasi format penulisan, atribut campuran, serta informasi tekstual yang belum sepenuhnya dapat digunakan secara langsung dalam proses komputasi. Oleh karena itu, data perlu diseragamkan dan digabungkan menjadi metadata yang digunakan sebagai korpus dokumen pada proses TF-IDF dan \textit{Cosine Similarity}. Alur preprocessing data dan pembentukan metadata ditunjukkan pada Gambar~\ref{fig:alur_metadata}.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[height=0.48\textheight, keepaspectratio]{assets/pics/Diagram/alur_metadata.png}
+    \caption{Alur Preprocessing Data dan Pembentukan Metadata Laptop}
+    \label{fig:alur_metadata}
+\end{figure}
+
+Gambar~\ref{fig:alur_metadata} menunjukkan proses perubahan data laptop mentah menjadi metadata laptop yang siap digunakan sebagai korpus dokumen. Proses tersebut meliputi pembersihan data, ekstraksi atribut numerik, pembentukan \textit{auto-tag}, pembentukan label, dan pembentukan metadata laptop. Metadata yang telah terbentuk kemudian disimpan pada field \texttt{usage} dalam file JSON dan digunakan pada proses pembobotan TF-IDF serta perhitungan \textit{Cosine Similarity}.
+
+Tahap preprocessing data dan pembentukan metadata berbeda dengan preprocessing teks pada model rekomendasi. Pada tahap ini, tujuan utamanya adalah menyiapkan dataset dan membentuk metadata laptop sebagai representasi dokumen. Sementara itu, preprocessing teks pada model rekomendasi bertujuan untuk mengubah metadata laptop dan query pengguna menjadi daftar term sebelum dihitung menggunakan TF-IDF. Dengan demikian, metadata tidak dibentuk dua kali, melainkan dibentuk satu kali kemudian diproses kembali sebagai input pembobotan TF-IDF.
+
+Kualitas metadata yang dibentuk akan memengaruhi kualitas hasil rekomendasi, karena metadata menjadi dasar representasi konten laptop dalam proses pengukuran kemiripan.
+
+%-----------------------------------------------------------------------------%
+\subsection{Pembersihan Data}
+%-----------------------------------------------------------------------------%
+Pembersihan data dilakukan untuk memperbaiki kualitas data mentah hasil pengumpulan agar lebih konsisten dan siap diproses pada tahap berikutnya. Data awal yang diperoleh dari halaman produk masih memiliki variasi format penulisan, karakter khusus, perbedaan penulisan istilah, serta format spesifikasi yang belum seragam antarproduk.
+
+Pada tahap ini, proses pembersihan data dilakukan dengan mengubah seluruh teks menjadi huruf kecil, memperbaiki format angka desimal, menormalisasi penulisan spesifikasi CPU dan GPU, menyesuaikan konteks beberapa istilah, menghapus karakter atau simbol yang tidak diperlukan, serta merapikan spasi berlebih. Proses ini dilakukan agar format teks pada atribut laptop menjadi lebih konsisten sebelum digunakan pada tahap ekstraksi atribut, pembentukan \textit{auto-tag}, pembentukan label, dan pembentukan metadata laptop.
+
+Implementasi pembersihan teks dilakukan menggunakan fungsi \texttt{clean\_text}. Fungsi ini digunakan untuk menyeragamkan huruf menjadi huruf kecil, memperbaiki format angka desimal, menormalisasi penulisan CPU/GPU, menyesuaikan konteks beberapa istilah, menghapus karakter yang tidak diperlukan, dan merapikan spasi.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Fungsi Pembersihan Teks}, label=kode:pembersihan_teks_metadata]
+def clean_text(text):
+    text = str(text).lower()
+
+    text = re.sub(r'(\d+),(\d+)', r'\1.\2', text)
+    text = re.sub(r'\b(rtx|gtx|rx)\s*([0-9]{3,4})\b', r'\1 \2', text)
+    text = re.sub(r'\b(i[3579])[-\s]*([0-9]{4,5}[a-z]{0,2})\b',
+                  r'\1 \2', text)
+
+    text = re.sub(r'\bcompact\b', 'layar compact', text)
+    text = re.sub(r'\bbagus\b', 'layar bagus', text)
+    text = re.sub(r'\bcpu ekosistem\b', 'cpu apple ekosistem apple', text)
+
+    text = re.sub(r'[^\w\s\.]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
+\end{lstlisting}
+
+Contoh hasil pembersihan data ditunjukkan pada Tabel~\ref{tab:contoh_pembersihan_data_bab3}. Tabel tersebut digunakan sebagai ilustrasi proses pembersihan data, sedangkan hasil lengkap pengolahan dataset disajikan pada Bab IV.
+
+\begin{table}[htbp]
+\centering
+\caption{Contoh Pembersihan Data}
+\label{tab:contoh_pembersihan_data_bab3}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Data Awal} & \textbf{Hasil Pembersihan} \\ \hline
+15,6 Inch & 15.6 inch \\ \hline
+RTX3050 & rtx 3050 \\ \hline
+Intel Core i5-13420H & intel core i5 13420h \\ \hline
+compact & layar compact \\ \hline
+\end{tabular}
+\end{table}
+
+%-----------------------------------------------------------------------------%
+\subsection{Ekstraksi Atribut Numerik}
+%-----------------------------------------------------------------------------%
+Setelah data dibersihkan, tahap berikutnya adalah ekstraksi atribut numerik dari beberapa atribut spesifikasi laptop. Tahap ini diperlukan karena beberapa atribut pada data awal masih berbentuk teks campuran, misalnya kapasitas RAM, kapasitas penyimpanan, ukuran layar, berat perangkat, dan harga. Agar atribut tersebut dapat digunakan dalam proses penyaringan, pembentukan \textit{auto-tag}, pembentukan label, dan pembentukan metadata, nilainya perlu diubah ke dalam bentuk numerik.
+
+Atribut numerik yang digunakan pada penelitian ini meliputi harga dalam satuan Rupiah, kapasitas RAM dalam satuan GB, kapasitas penyimpanan dalam satuan GB, ukuran layar dalam satuan inci, dan berat perangkat dalam satuan kilogram. Nilai numerik tersebut digunakan untuk membantu proses pengelompokan karakteristik laptop, misalnya kategori kapasitas RAM, kapasitas penyimpanan, ukuran layar, bobot perangkat, dan rentang harga. Hasil ekstraksi atribut numerik juga digunakan sebagai dasar dalam fitur filter pada sistem.
+
+Contoh implementasi ekstraksi atribut numerik ditunjukkan pada potongan kode berikut. Kapasitas penyimpanan dalam satuan TB dikonversi ke GB agar dapat digunakan secara konsisten pada proses filter dan pembentukan metadata.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Ekstraksi Atribut Numerik}, label=kode:ekstraksi_atribut_numerik]
+df['Harga_Numeric'] = pd.to_numeric(df['Harga_Numeric'], errors='coerce')
+df['Berat_Numeric'] = pd.to_numeric(df['Berat_Numeric'], errors='coerce')
+
+df['RAM_Numeric'] = pd.to_numeric(
+    df['RAM'].str.extract(r'(\d+)', expand=False),
+    errors='coerce'
+)
+
+def convert_storage_to_gb(text):
+    text = str(text).lower()
+
+    if "tb" in text:
+        val = re.search(r'(\d+)', text)
+        return int(val.group(1)) * 1024 if val else None
+
+    elif "gb" in text:
+        val = re.search(r'(\d+)', text)
+        return int(val.group(1)) if val else None
+
+    return None
+
+df['Penyimpanan_Numeric'] = df['Penyimpanan'].apply(convert_storage_to_gb)
+
+df['Ukuran_Layar_Numeric'] = pd.to_numeric(
+    df['Ukuran_Layar_Numeric'],
+    errors='coerce'
+)
+\end{lstlisting}
+
+Contoh hasil ekstraksi atribut numerik ditunjukkan pada Tabel~\ref{tab:contoh_ekstraksi_numerik_bab3}. Ekstraksi ini penting karena atribut numerik digunakan pada fitur filter, pembentukan \textit{auto-tag}, pembentukan label, dan pembentukan metadata laptop.
+
+\begin{table}[htbp]
+\centering
+\caption{Contoh Ekstraksi Atribut Numerik}
+\label{tab:contoh_ekstraksi_numerik_bab3}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Atribut} & \textbf{Data Awal} & \textbf{Hasil Numerik} \\ \hline
+Harga & Rp 12.399.000 & 12399000 \\ \hline
+RAM & 16 GB & 16 \\ \hline
+Penyimpanan & 1 TB & 1024 \\ \hline
+Ukuran layar & 15,6 Inch & 15.6 \\ \hline
+Berat & 1.49 kg & 1.49 \\ \hline
+\end{tabular}
+\end{table}
+
+%-----------------------------------------------------------------------------%
+\subsection{Pembentukan \textit{Auto-Tagging}}
+%-----------------------------------------------------------------------------%
+Tahap pembentukan \textit{auto-tagging} dilakukan untuk membentuk sekumpulan kata kunci penggunaan secara otomatis berdasarkan karakteristik spesifikasi laptop. Tujuan dari tahap ini adalah menjembatani spesifikasi teknis laptop dengan kebutuhan pengguna non-teknis atau non-ahli yang umumnya disampaikan dalam bahasa sehari-hari.
+
+Pembentukan \textit{auto-tag} dilakukan menggunakan aturan berbasis karakteristik perangkat. Misalnya, laptop dengan prosesor dan kartu grafis berperforma tinggi dapat diberi tag yang berkaitan dengan kebutuhan seperti \textit{gaming}, \textit{editing}, atau \textit{rendering}. Sebaliknya, laptop dengan spesifikasi dasar dapat diberi tag yang berkaitan dengan kebutuhan seperti \textit{office}, kuliah, \textit{browsing}, atau penggunaan ringan.
+
+Secara umum, pembentukan \textit{auto-tag} pada penelitian ini dilakukan dengan mempertimbangkan beberapa kelompok atribut laptop, yaitu atribut performa, atribut penyimpanan, atribut tampilan, atribut mobilitas, dan atribut harga. Atribut performa mencakup kelas prosesor, kelas kartu grafis, dan kapasitas RAM. Atribut penyimpanan mencakup kapasitas penyimpanan, sedangkan atribut tampilan mencakup ukuran layar, jenis panel layar, dan resolusi layar. Selain itu, atribut mobilitas dilihat dari berat perangkat, sementara atribut harga digunakan untuk mengelompokkan laptop berdasarkan rentang harga tertentu.
+
+Hasil \textit{auto-tagging} berupa kumpulan kata kunci yang menggambarkan karakteristik dan potensi penggunaan laptop. Kumpulan tag ini kemudian digunakan sebagai salah satu komponen utama dalam pembentukan metadata laptop.
+
+Potongan kode berikut menunjukkan contoh aturan pada proses \textit{auto-tagging}. Aturan tersebut membaca atribut CPU, GPU, RAM, penyimpanan, berat, layar, panel, resolusi, dan harga untuk menghasilkan kata kunci penggunaan.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Auto-Tagging Laptop}, label=kode:auto_tagging_laptop]
+def generate_tags(row):
+    tags = []
+
+    cpu = str(row['CPU']).lower()
+    gpu = str(row['GPU']).lower()
+    ram = row['RAM_Numeric']
+    storage = row['Penyimpanan_Numeric']
+    berat = row['Berat_Numeric']
+    layar = row['Ukuran_Layar_Numeric']
+    panel = str(row['Tipe_Panel_Layar']).lower()
+    resolusi = str(row['Resolusi_Layar']).lower()
+    harga = row['Harga_Numeric']
+
+    if "intel" in cpu or "core" in cpu:
+        tags.append("cpu intel")
+    elif "amd" in cpu or "ryzen" in cpu:
+        tags.append("cpu amd")
+    elif "apple" in cpu:
+        tags.extend(["cpu apple", "ekosistem apple"])
+
+    if "rtx" in gpu or "apple" in gpu:
+        tags.extend(["gpu kelas menengah", "gaming berat"])
+    elif "arc" in gpu or "iris" in gpu:
+        tags.extend(["grafis menengah modern", "gaming menengah"])
+    else:
+        tags.extend(["grafis ringan bawaan", "cocok office"])
+
+    if pd.notna(ram):
+        if ram >= 16:
+            tags.extend(["multitasking lancar", "coding", "kerja kantor"])
+        elif ram >= 8:
+            tags.extend(["multitasking cukup", "kuliah", "skripsi"])
+
+    if pd.notna(storage):
+        if storage >= 1024:
+            tags.append("penyimpanan sangat besar")
+        elif storage >= 512:
+            tags.append("penyimpanan besar")
+
+    if pd.notna(berat) and berat <= 1.5:
+        tags.extend(["ringan", "mudah dibawa", "mobilitas tinggi"])
+
+    if pd.notna(layar):
+        if layar >= 16:
+            tags.append("layar besar")
+        elif layar >= 14:
+            tags.append("layar sedang")
+
+    if "oled" in panel:
+        tags.extend(["layar oled", "cocok multimedia"])
+    elif "ips" in panel:
+        tags.append("layar bagus")
+
+    if any(x in resolusi for x in ["3k", "2.8k", "2560", "4k", "uhd"]):
+        tags.extend(["resolusi tinggi", "warna tajam", "desainer"])
+
+    if pd.notna(harga) and harga <= 6500000:
+        tags.extend(["murah", "budget", "ramah kantong"])
+
+    return " ".join(dict.fromkeys(tags))
+\end{lstlisting}
+
+Aturan tersebut digunakan untuk memperkaya metadata laptop berdasarkan kriteria spesifikasi yang telah ditentukan, bukan sebagai proses pelatihan model klasifikasi. Oleh karena itu, \textit{auto-tagging} berperan sebagai tahap rekayasa fitur teks untuk mendukung proses \textit{Content-Based Filtering}.
+
+%-----------------------------------------------------------------------------%
+\subsection{Pembentukan Label}
+%-----------------------------------------------------------------------------%
+Selain \textit{auto-tagging}, pada tahap ini juga dibentuk label berdasarkan spesifikasi laptop. Label digunakan sebagai ringkasan karakteristik atau kategori utama laptop berdasarkan atribut yang dimiliki. Berbeda dengan \textit{auto-tag} yang berisi kata kunci lebih luas untuk memperluas pencocokan query, label berfungsi untuk memberikan deskripsi yang lebih ringkas mengenai kecenderungan penggunaan atau karakteristik laptop.
+
+Potongan kode berikut menunjukkan contoh aturan pada proses pembentukan label. Label dibentuk dari karakteristik utama laptop, seperti kelas CPU, kelas GPU, kapasitas RAM, kapasitas penyimpanan, berat perangkat, ukuran layar, tipe panel, resolusi layar, dan rentang harga.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Pembentukan Label Laptop}, label=kode:pembentukan_label_laptop]
+def generate_label(row):
+    labels = []
+
+    cpu = str(row.get('CPU', '')).lower()
+    gpu = str(row.get('GPU', '')).lower()
+    ram = row.get('RAM_Numeric')
+    storage = row.get('Penyimpanan_Numeric')
+    berat = row.get('Berat_Numeric')
+    layar = row.get('Ukuran_Layar_Numeric')
+    harga = row.get('Harga_Numeric')
+
+    if any(x in cpu for x in ['i7', 'i9', 'ryzen 7', 'ryzen 9']):
+        labels.extend(['performa tinggi', 'pekerjaan berat'])
+    elif any(x in cpu for x in ['i5', 'ryzen 5']):
+        labels.extend(['performa menengah', 'kerja harian'])
+    else:
+        labels.extend(['penggunaan ringan', 'office', 'belajar'])
+
+    if any(x in gpu for x in ['rtx', 'gtx', 'geforce', 'nvidia']):
+        labels.extend(['gaming', 'editing video', 'desain grafis berat'])
+    else:
+        labels.extend(['office', 'browsing', 'nonton', 'kuliah'])
+
+    if pd.notna(ram) and ram >= 16:
+        labels.extend(['multitasking lancar', 'coding', 'kerja kantor'])
+
+    if pd.notna(storage) and storage >= 512:
+        labels.extend(['penyimpanan cukup besar', 'dokumen kerja'])
+
+    if pd.notna(berat) and berat <= 1.5:
+        labels.extend(['ringan', 'mudah dibawa', 'mobilitas tinggi'])
+
+    if pd.notna(layar) and layar >= 14:
+        labels.extend(['layar standar', 'produktif', 'kuliah'])
+
+    if pd.notna(harga) and harga <= 6500000:
+        labels.extend(['murah', 'budget', 'ramah kantong'])
+
+    return " ".join(dict.fromkeys(labels))
+\end{lstlisting}
+
+Pembentukan label dilakukan dengan memanfaatkan atribut-atribut spesifikasi yang telah dibersihkan dan diekstraksi. Sebagai contoh, kombinasi prosesor kelas menengah, RAM yang cukup besar, dan bobot yang ringan dapat menghasilkan label yang berkaitan dengan kebutuhan kerja harian, kuliah, atau mobilitas tinggi. Sementara itu, kombinasi kartu grafis diskrit, resolusi tinggi, dan kapasitas RAM besar dapat menghasilkan label yang berkaitan dengan kebutuhan desain grafis, \textit{editing}, atau \textit{gaming}.
+
+Label yang dihasilkan tidak ditentukan secara manual oleh pengguna, melainkan dibentuk menggunakan aturan berbasis karakteristik perangkat. Dengan demikian, label dapat membantu memperkuat representasi metadata laptop sebelum diproses menggunakan TF-IDF.
+
+%-----------------------------------------------------------------------------%
+\subsection{Pembentukan Metadata Laptop}
+%-----------------------------------------------------------------------------%
+Tahap akhir dari preprocessing data adalah pembentukan metadata laptop. Metadata laptop merupakan representasi teks yang dibangun dari gabungan atribut penting pada dataset, seperti merek laptop, nama produk, CPU, GPU, kapasitas RAM, kapasitas penyimpanan, ukuran layar, hasil \textit{auto-tagging}, dan label. Gabungan atribut tersebut digunakan untuk membentuk representasi konten laptop yang lebih informatif agar dapat dicocokkan dengan kueri pengguna berbasis teks.
+
+Pada tahap ini, atribut-atribut penting laptop digabungkan menjadi satu teks. Selain atribut asli, sistem juga menambahkan informasi turunan berdasarkan jenis GPU, seperti \textit{grafis apple} untuk GPU Apple dan \textit{grafis terintegrasi} untuk GPU bawaan seperti Intel UHD, Iris, Intel Graphics, atau GPU terintegrasi lainnya. Informasi ini ditambahkan agar metadata lebih mampu merepresentasikan karakteristik grafis laptop secara sederhana dan mudah dicocokkan dengan kebutuhan pengguna non-teknis.
+
+Setelah seluruh komponen metadata digabungkan, teks diproses kembali melalui fungsi pembersihan teks dan penghapusan duplikasi term. Proses pembersihan teks dilakukan untuk menyeragamkan format teks, mengubah huruf menjadi huruf kecil, menormalisasi beberapa pola penulisan, menghapus simbol yang tidak diperlukan, serta merapikan spasi. Selanjutnya, penghapusan duplikasi term dilakukan agar metadata yang dihasilkan menjadi lebih ringkas dan tidak mengandung pengulangan kata yang tidak diperlukan.
+
+Metadata laptop yang telah terbentuk kemudian disimpan pada kolom \texttt{Metadata} dalam dataset hasil preprocessing. Kolom \texttt{Metadata} inilah yang digunakan sebagai korpus dokumen pada proses pembobotan TF-IDF dan perhitungan \textit{Cosine Similarity}. Dengan demikian, kualitas metadata yang dibentuk akan memengaruhi kualitas hasil rekomendasi yang dihasilkan sistem.
+
+Implementasi pembentukan metadata ditunjukkan pada potongan kode berikut. Pada kode tersebut, atribut penting laptop digabungkan ke dalam variabel \texttt{parts}. Setelah itu, teks metadata dibersihkan menggunakan fungsi \texttt{clean\_text} dan duplikasi term dihapus menggunakan fungsi \texttt{remove\_duplicates}.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Pembentukan Metadata Laptop}, label=kode:pembentukan_metadata_laptop]
+def build_metadata(row):
+parts = []
+
+parts.extend([
+    str(row.get('Brand', '')),
+    str(row.get('Nama_Display', '')),
+    str(row.get('CPU', '')),
+    str(row.get('GPU', ''))
+])
+
+gpu = str(row.get('GPU', '')).lower()
+if "apple" in gpu:
+    parts.append("grafis apple")
+elif any(x in gpu for x in ["uhd", "iris", "intel", "integrated"]):
+    parts.append("grafis terintegrasi")
+
+parts.append(format_ram(row.get('RAM_Numeric')))
+parts.append(format_storage(row.get('Penyimpanan_Numeric')))
+parts.append(format_layar(row.get('Ukuran_Layar_Numeric')))
+
+parts.append(str(row.get('Auto_Tag', '')))
+parts.append(simplify_label(row.get('Label', '')))
+
+parts = [str(p) for p in parts if pd.notna(p) and str(p).strip() != ""]
+
+text = " ".join(parts)
+text = clean_text(text)
+text = remove_duplicates(text)
+
+return text
+
+df['Metadata'] = df.apply(build_metadata, axis=1)
+\end{lstlisting}
+
+Contoh hasil pembentukan metadata ditunjukkan pada Tabel~\ref{tab:contoh_metadata_bab3}. Contoh tersebut memperlihatkan bahwa metadata laptop dibentuk dari gabungan identitas produk, spesifikasi utama, hasil \textit{auto-tagging}, dan label. Dengan demikian, metadata tidak hanya memuat spesifikasi teknis laptop, tetapi juga kata kunci penggunaan yang membantu proses pencocokan antara kebutuhan pengguna dan konten laptop.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Contoh Pembentukan Metadata Laptop}
+\label{tab:contoh_metadata_bab3}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{|p{4cm}|p{9cm}|}
+\hline
+\textbf{Komponen} & \textbf{Isi} \\ \hline
+Identitas produk & Acer Aspire Go 14 \\ \hline
+Spesifikasi utama & Intel Core i3-1315U, Intel UHD Graphics, RAM 16 GB, SSD 512 GB, layar 14 inch \\ \hline
+\textit{Auto-tag} & cpu intel, performa dasar, grafis ringan bawaan, multitasking lancar, penyimpanan besar, gaming kasual ringan, ringan, layar sedang, cocok office, nugas, skripsi, kuliah, browsing, coding, mudah dibawa \\ \hline
+Label & penggunaan ringan, office, belajar, browsing, nonton, kuliah, multitasking lancar, coding, kerja kantor, ringan, mudah dibawa, mobilitas tinggi \\ \hline
+Metadata & acer aspire go 14 intel core i3 1315u uhd graphics ram 16gb ssd 512gb layar 14.0 inch cpu intel performa dasar grafis ringan bawaan multitasking lancar penyimpanan besar gaming kasual ringan cocok office nugas skripsi kuliah browsing coding mudah dibawa penggunaan ringan belajar kerja kantor mobilitas tinggi \\ \hline
+\end{tabular}
+\end{table}
+
+%-----------------------------------------------------------------------------%
+\section{Pengembangan Model Rekomendasi}
+%-----------------------------------------------------------------------------%
+Pengembangan model rekomendasi dilakukan untuk menentukan proses yang digunakan sistem dalam menghasilkan rekomendasi laptop berdasarkan kebutuhan pengguna. Pada penelitian ini, model rekomendasi dikembangkan menggunakan pendekatan \textit{Content-Based Filtering} dengan memanfaatkan pembobotan TF-IDF dan perhitungan \textit{Cosine Similarity}. Pendekatan ini digunakan karena sistem tidak memanfaatkan data rating pengguna, riwayat transaksi, riwayat klik, maupun data interaksi pengguna lain.
+
+Model rekomendasi bekerja dengan membandingkan deskripsi kebutuhan pengguna dengan metadata laptop yang telah dibentuk pada tahap sebelumnya. Metadata laptop digunakan sebagai representasi teks dari karakteristik setiap laptop, sedangkan deskripsi kebutuhan pengguna digunakan sebagai kueri. Kedua data tersebut kemudian diproses dalam ruang representasi TF-IDF yang sama agar tingkat kemiripannya dapat dihitung menggunakan \textit{Cosine Similarity}.
+
+Selain pencocokan berbasis teks, sistem juga menyediakan filter terstruktur sebagai fitur pendukung. Filter ini digunakan untuk mempersempit kandidat laptop berdasarkan batasan tertentu, seperti harga, berat perangkat, ukuran layar, CPU, RAM, penyimpanan, sistem operasi, tipe GPU, tipe panel layar, dan kualitas layar. Namun, filter terstruktur tidak menjadi metode utama rekomendasi, karena penentuan relevansi utama tetap dilakukan melalui pembobotan TF-IDF dan perhitungan \textit{Cosine Similarity}.
+
+Gambaran alur model rekomendasi pada penelitian ini ditunjukkan pada Gambar~\ref{fig:alur_model_rekomendasi}.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[height=0.62\textheight, keepaspectratio]{assets/pics/Diagram/alur_model_rekomendasi.png}
+\caption{Alur Model Rekomendasi}
+\label{fig:alur_model_rekomendasi}
+\end{figure}
+
+Gambar~\ref{fig:alur_model_rekomendasi} menunjukkan bahwa proses rekomendasi dimulai dari input deskripsi kebutuhan pengguna. Input tersebut kemudian melalui tahap preprocessing teks. Setelah itu, sistem memuat metadata laptop dan membentuk korpus sementara yang terdiri dari metadata laptop dan kueri pengguna. Korpus tersebut digunakan untuk perhitungan TF-IDF, normalisasi vektor, perhitungan \textit{Cosine Similarity}, pemeringkatan awal berdasarkan skor, penerapan filter terstruktur, mekanisme \textit{fallback recommendation}, hingga menghasilkan daftar rekomendasi \textit{Top-6}.
+
+%-----------------------------------------------------------------------------%
+\subsection{Input Kebutuhan Pengguna}
+%-----------------------------------------------------------------------------%
+Input utama pada sistem rekomendasi ini berupa deskripsi kebutuhan pengguna dalam bentuk teks. Pengguna dapat menuliskan kebutuhan laptop menggunakan bahasa alami, misalnya laptop untuk kuliah, mengerjakan skripsi, bekerja, desain grafis, \textit{editing}, \textit{gaming}, atau kebutuhan mobilitas tinggi. Pendekatan ini digunakan agar sistem lebih mudah digunakan oleh pengguna non-teknis atau non-ahli yang belum tentu memahami spesifikasi laptop secara mendalam.
+
+Selain input teks, sistem juga menyediakan filter terstruktur sebagai fitur tambahan. Filter tersebut meliputi batas harga maksimum, batas berat perangkat, ukuran layar maksimum, CPU, RAM, kapasitas penyimpanan, sistem operasi, tipe GPU, tipe panel layar, dan kualitas layar. Filter ini berfungsi untuk membantu mempersempit kandidat laptop sesuai preferensi pengguna.
+
+Dalam proses rekomendasi, deskripsi kebutuhan pengguna diperlakukan sebagai kueri teks. Kueri tersebut kemudian diproses menggunakan tahapan preprocessing agar dapat dibandingkan dengan metadata laptop dalam ruang vektor TF-IDF.
+
+%-----------------------------------------------------------------------------%
+\subsection{Preprocessing Teks}
+%-----------------------------------------------------------------------------%
+Preprocessing teks dilakukan untuk menyiapkan deskripsi kebutuhan pengguna dan metadata laptop sebelum masuk ke tahap pembobotan TF-IDF. Tahap ini bertujuan untuk membuat bentuk teks menjadi lebih konsisten dan mengurangi kata-kata yang tidak relevan dalam proses perhitungan kemiripan.
+
+\noindent Preprocessing teks pada model rekomendasi meliputi beberapa tahapan, yaitu:
+\begin{enumerate}
+\item mengubah seluruh teks menjadi huruf kecil,
+\item menghapus tanda baca dan karakter khusus,
+\item memecah teks menjadi token atau kata,
+\item menghapus kata umum yang tidak memiliki kontribusi besar terhadap pencocokan, seperti kata hubung, kata sapaan, dan kata bantu,
+\item menghasilkan daftar term yang digunakan dalam proses pembobotan TF-IDF.
+\end{enumerate}
+
+Tahap preprocessing ini diterapkan pada dua jenis teks, yaitu metadata laptop dan deskripsi kebutuhan pengguna. Dengan demikian, proses pencocokan dapat dilakukan secara lebih konsisten karena kedua jenis data telah melalui tahapan pembersihan teks yang sama.
+
+Perlu ditekankan bahwa pada tahap ini metadata tidak dibentuk ulang. Metadata yang telah disimpan pada field \texttt{usage} hanya diproses menjadi daftar term agar dapat direpresentasikan sebagai vektor TF-IDF. Hal ini membedakan preprocessing teks pada model rekomendasi dengan preprocessing data pada tahap pembentukan metadata.
+
+Pada implementasi sistem, preprocessing teks dilakukan menggunakan fungsi \texttt{\_preprocess}. Potongan kode berikut menunjukkan proses perubahan teks menjadi daftar term yang siap digunakan pada pembobotan TF-IDF.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Preprocessing Teks pada Model Rekomendasi}, label=kode:preprocessing_teks_rekomendasi]
+def _preprocess(self, text: str) -> List[str]:
+text = str(text).lower()
+text = re.sub(r'[^a-z0-9\s]', '', text)
+
+stopwords = {
+    'dan', 'atau', 'untuk', 'dengan', 'yang', 'di', 'ke',
+    'dari', 'pada', 'adalah', 'ini', 'itu', 'buat',
+    'saya', 'aku', 'pengen', 'ingin', 'mau', 'beli',
+    'cari', 'carikan', 'tolong', 'dong', 'tidak',
+    'bukan', 'sangat', 'paling'
+}
+
+return [word for word in text.split() if word not in stopwords]
+\end{lstlisting}
+
+Contoh hasil preprocessing query pengguna ditunjukkan pada Tabel~\ref{tab:contoh_preprocessing_query_bab3}. Contoh ini menunjukkan bahwa kata-kata umum yang tidak berkontribusi besar terhadap pencocokan dihapus, sedangkan kata yang berkaitan dengan kebutuhan utama tetap dipertahankan.
+
+\begin{table}[htbp]
+\centering
+\caption{Contoh Preprocessing Query Pengguna}
+\label{tab:contoh_preprocessing_query_bab3}
+\begin{tabular}{|p{6cm}|p{6cm}|}
+\hline
+\textbf{Input Pengguna} & \textbf{Hasil Preprocessing} \\ \hline
+Saya mau laptop untuk kuliah dan coding & laptop, kuliah, coding \\ \hline
+Laptop ringan untuk dibawa ke kampus & laptop, ringan, dibawa, kampus \\ \hline
+Laptop untuk gaming dan edit video & laptop, gaming, edit, video \\ \hline
+\end{tabular}
+\end{table}
+
+%-----------------------------------------------------------------------------%
+\subsection{Memuat Metadata Laptop}
+%-----------------------------------------------------------------------------%
+Setelah input pengguna diproses, sistem memuat metadata laptop dari dataset rekomendasi. Metadata laptop merupakan representasi teks dari karakteristik setiap laptop yang telah dibentuk pada tahap sebelumnya. Pada implementasi model rekomendasi, metadata laptop dibaca dari field \texttt{usage} pada file JSON.
+
+Setiap metadata laptop diperlakukan sebagai satu dokumen dalam korpus. Dengan pendekatan ini, karakteristik laptop dapat direpresentasikan sebagai teks dan dibandingkan dengan kebutuhan pengguna menggunakan metode \textit{Content-Based Filtering}.
+
+Potongan kode berikut menunjukkan proses pembentukan korpus dokumen dari field \texttt{usage} pada setiap data laptop ketika objek \texttt{LaptopRecommender} dibuat.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Memuat Metadata Laptop sebagai Korpus}, label=kode:memuat_metadata_laptop]
+class LaptopRecommender:
+def **init**(self, laptops: List[Dict]):
+self.laptops = laptops
+self.corpus = [
+self._preprocess(laptop.get('usage', ''))
+for laptop in laptops
+]
+self.tfidf_matrix = self._compute_tfidf()
+\end{lstlisting}
+
+%-----------------------------------------------------------------------------%
+\subsection{Pembentukan Korpus Sementara}
+%-----------------------------------------------------------------------------%
+Tahap berikutnya adalah pembentukan korpus sementara. Korpus sementara dibentuk dengan menambahkan deskripsi kebutuhan pengguna ke dalam kumpulan data laptop sebagai dokumen sementara. Dokumen sementara tersebut diberi identitas khusus, yaitu \texttt{USER\_QUERY\_999}, agar dapat dibedakan dari data laptop asli.
+
+Pembentukan korpus sementara dilakukan agar kueri pengguna dan metadata laptop dapat dihitung dalam ruang representasi TF-IDF yang sama. Dengan kata lain, sistem tidak menghitung vektor kueri secara terpisah dari metadata laptop, tetapi memasukkan kueri pengguna ke dalam korpus sementara agar bobot term pada kueri dan dokumen dapat dibandingkan secara langsung.
+
+Potongan kode berikut menunjukkan proses penambahan deskripsi kebutuhan pengguna sebagai dokumen sementara dalam korpus.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Pembentukan Korpus Sementara}, label=kode:korpus_sementara]
+dummy_user_id = "USER_QUERY_999"
+user_profile = {
+"id": dummy_user_id,
+"usage": user_input['description']
+}
+
+laptops_temp = self.laptops + [user_profile]
+
+temp_recommender = LaptopRecommender(laptops_temp)
+raw_recommendations = temp_recommender.recommend(
+dummy_user_id,
+top_n=len(laptops_temp)-1
+)
+\end{lstlisting}
+
+%-----------------------------------------------------------------------------%
+\subsection{Perhitungan TF-IDF}
+%-----------------------------------------------------------------------------%
+Setelah korpus sementara terbentuk, tahap berikutnya adalah perhitungan TF-IDF. Pembobotan ini digunakan untuk mengubah teks menjadi representasi numerik dalam bentuk vektor. Setiap term yang muncul dalam metadata laptop dan kueri pengguna diberi bobot berdasarkan tingkat kepentingannya dalam dokumen dan korpus.
+
+Pada penelitian ini, metadata laptop diperlakukan sebagai dokumen, sedangkan kumpulan metadata seluruh laptop dan kueri pengguna membentuk korpus sementara. Pembobotan TF-IDF dilakukan melalui tiga tahap, yaitu perhitungan \textit{Term Frequency} (TF) pada Persamaan~\ref{eq:tf}, perhitungan \textit{Inverse Document Frequency} (IDF) pada Persamaan~\ref{eq:idf}, dan perhitungan bobot TF-IDF pada Persamaan~\ref{eq:tf-idf}. Hasil dari tahap ini adalah vektor TF-IDF untuk kueri pengguna dan vektor TF-IDF untuk setiap metadata laptop.
+
+Perhitungan TF-IDF, normalisasi vektor, dan \textit{Cosine Similarity} pada sistem ini diimplementasikan secara manual menggunakan bahasa pemrograman Python tanpa menggunakan pustaka \textit{machine learning} atau pustaka \textit{text vectorization} khusus. Dengan demikian, proses pembobotan dapat dijelaskan secara langsung sesuai dengan kebutuhan penelitian.
+
+Pada implementasi sistem, TF dihitung menggunakan struktur data \texttt{Counter}, sedangkan DF dan IDF dihitung menggunakan \texttt{defaultdict}. Potongan kode berikut menunjukkan proses perhitungan TF dan IDF.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Perhitungan TF dan IDF}, label=kode:perhitungan_tf_idf]
+def _compute_tf(self, doc: List[str]) -> Dict[str, float]:
+tf = Counter(doc)
+total_words = len(doc)
+
+return {
+    word: count / total_words
+    for word, count in tf.items()
+} if total_words > 0 else {}
+
+def _compute_idf(self) -> Dict[str, float]:
+N = len(self.corpus)
+df = defaultdict(int)
+
+for doc in self.corpus:
+    unique_words = set(doc)
+    for word in unique_words:
+        df[word] += 1
+
+return {
+    word: math.log((1 + N) / (1 + count)) + 1
+    for word, count in df.items()
+}
+\end{lstlisting}
+
+%-----------------------------------------------------------------------------%
+\subsection{Normalisasi Vektor}
+%-----------------------------------------------------------------------------%
+Setelah nilai TF dan IDF diperoleh, sistem menghitung bobot TF-IDF untuk setiap term. Bobot TF-IDF tersebut kemudian dinormalisasi menggunakan panjang vektor Euclidean. Normalisasi dilakukan agar proses perhitungan kemiripan tidak terlalu dipengaruhi oleh panjang teks atau jumlah term pada dokumen. Dengan normalisasi, perbandingan antar-vektor lebih berfokus pada arah dan distribusi bobot term.
+
+Normalisasi vektor dilakukan mengacu pada Persamaan~\ref{eq:norm_vector}. Hasil dari tahap ini adalah vektor TF-IDF yang telah dinormalisasi, baik untuk kueri pengguna maupun metadata laptop. Vektor yang telah dinormalisasi kemudian digunakan pada tahap perhitungan \textit{Cosine Similarity}.
+
+Pada implementasi sistem, perhitungan TF-IDF dan normalisasi vektor dilakukan pada fungsi \texttt{\_compute\_tfidf}. Potongan kode berikut menunjukkan pembentukan bobot TF-IDF dan proses normalisasi vektor.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Perhitungan TF-IDF dan Normalisasi Vektor}, label=kode:tfidf_normalisasi]
+def _compute_tfidf(self) -> List[Dict[str, float]]:
+idf = self._compute_idf()
+tfidf_matrix = []
+
+for doc in self.corpus:
+    tf = self._compute_tf(doc)
+    tfidf = {
+        word: tf_val * idf.get(word, 0)
+        for word, tf_val in tf.items()
+    }
+    
+    norm = math.sqrt(sum(val**2 for val in tfidf.values()))
+    if norm > 0:
+        tfidf = {
+            word: val / norm
+            for word, val in tfidf.items()
+        }
+
+    tfidf_matrix.append(tfidf)
+
+return tfidf_matrix
+\end{lstlisting}
+
+%-----------------------------------------------------------------------------%
+\subsection{Perhitungan \textit{Cosine Similarity}}
+%-----------------------------------------------------------------------------%
+Perhitungan \textit{Cosine Similarity} digunakan untuk mengukur tingkat kemiripan antara vektor kueri pengguna dan vektor metadata laptop. Nilai kemiripan dihitung berdasarkan perkalian titik antara dua vektor yang telah dinormalisasi.
+
+Perhitungan \textit{Cosine Similarity} dilakukan mengacu pada Persamaan~\ref{eq:cosine}. Nilai kemiripan yang lebih tinggi menunjukkan bahwa metadata laptop memiliki kesesuaian yang lebih besar dengan kebutuhan pengguna. Sebaliknya, nilai kemiripan yang rendah menunjukkan bahwa karakteristik laptop kurang sesuai dengan kueri pengguna.
+
+Karena vektor TF-IDF telah dinormalisasi pada tahap sebelumnya, perhitungan \textit{Cosine Similarity} pada implementasi dapat dilakukan menggunakan operasi dot product terhadap term yang sama pada kedua vektor. Potongan kode implementasinya adalah sebagai berikut.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Perhitungan Cosine Similarity}, label=kode:cosine_similarity]
+def _cosine_similarity(
+self,
+vec1: Dict[str, float],
+vec2: Dict[str, float]
+) -> float:
+intersection = set(vec1.keys()) & set(vec2.keys())
+dot_product = sum(
+vec1[word] * vec2[word]
+for word in intersection
+)
+
+return dot_product
+\end{lstlisting}
+
+%-----------------------------------------------------------------------------%
+\subsection{Pemeringkatan Awal Berdasarkan Skor}
+%-----------------------------------------------------------------------------%
+Setelah skor \textit{Cosine Similarity} diperoleh, sistem melakukan pemeringkatan awal berdasarkan skor kemiripan tertinggi. Setiap laptop diberi skor yang menunjukkan tingkat kesesuaiannya terhadap deskripsi kebutuhan pengguna. Laptop dengan skor tertinggi ditempatkan pada urutan awal karena dianggap paling relevan terhadap kebutuhan pengguna.
+
+Pemeringkatan awal ini dilakukan sebelum penerapan filter terstruktur. Dengan demikian, filter terstruktur tidak menggantikan metode rekomendasi utama, tetapi hanya berperan sebagai penyaring kandidat berdasarkan batasan yang diberikan pengguna.
+
+Potongan kode berikut menunjukkan proses perhitungan skor kemiripan terhadap seluruh laptop dan pengurutan skor dari nilai tertinggi ke nilai terendah.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Pemeringkatan Awal Berdasarkan Skor}, label=kode:pemeringkatan_awal]
+def recommend(self, target_id: str, top_n: int = 5) -> List[Dict]:
+target_idx = next(
+(i for i, laptop in enumerate(self.laptops)
+if laptop['id'] == target_id),
+None
+)
+
+target_vec = self.tfidf_matrix[target_idx]
+scores = []
+
+for i, vec in enumerate(self.tfidf_matrix):
+    if i != target_idx:
+        score = self._cosine_similarity(target_vec, vec)
+        scores.append({
+            'id': self.laptops[i]['id'],
+            'score': score
+        })
+        
+scores.sort(key=lambda x: x['score'], reverse=True)
+return scores[:top_n]
+\end{lstlisting}
+
+Pada implementasi sistem, terdapat pemeriksaan terhadap skor kemiripan tertinggi. Apabila skor tertinggi berada di bawah ambang batas tertentu, sistem mengembalikan hasil kosong karena tidak ditemukan kandidat yang cukup relevan terhadap kueri pengguna.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Pemeriksaan Ambang Batas Skor}, label=kode:threshold_similarity]
+highest_score = max(
+(rec['score'] for rec in raw_recommendations),
+default=0
+)
+
+if highest_score < 0.02:
+return {
+"is_fallback": False,
+"strict_count": 0,
+"data": []
+}
+\end{lstlisting}
+
+%-----------------------------------------------------------------------------%
+\subsection{Filter Terstruktur}
+%-----------------------------------------------------------------------------%
+Setelah pemeringkatan awal dilakukan, sistem menerapkan filter terstruktur berdasarkan preferensi pengguna. Filter ini digunakan untuk memastikan bahwa hasil rekomendasi tetap memperhatikan batasan eksplisit yang diberikan pengguna, seperti harga maksimum, berat maksimum, ukuran layar maksimum, CPU, RAM, kapasitas penyimpanan, sistem operasi, tipe GPU, tipe panel layar, dan kualitas layar.
+
+Pada tahap ini, laptop yang memenuhi seluruh kriteria filter dimasukkan ke dalam kelompok \textit{strict match}. Kelompok ini berisi kandidat laptop yang sesuai dengan hasil pencocokan teks sekaligus memenuhi seluruh batasan filter pengguna. Dengan demikian, hasil rekomendasi yang ditampilkan tidak hanya mempertimbangkan kesamaan deskripsi, tetapi juga memperhatikan batasan spesifikasi yang dipilih pengguna.
+
+Meskipun demikian, filter terstruktur tidak menjadi metode utama dalam penentuan relevansi. Relevansi utama tetap ditentukan oleh pembobotan TF-IDF dan perhitungan \textit{Cosine Similarity}. Filter hanya digunakan sebagai fitur pendukung agar hasil rekomendasi lebih sesuai dengan preferensi eksplisit pengguna.
+
+Potongan kode berikut menunjukkan sebagian implementasi filter terstruktur pada sistem.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Filter Terstruktur}, label=kode:filter_terstruktur]
+passed_all = True
+passed_price = True
+
+if float(laptop.get('price', 0)) > max_p:
+passed_all = False
+passed_price = False
+
+if float(laptop.get('weight_num', 3.0)) > max_w:
+passed_all = False
+
+if float(laptop.get('screen_size_num', 18.0)) > max_s:
+passed_all = False
+
+if user_input['cpu'] != 'All' and 
+user_input['cpu'].lower() not in str(laptop.get('cpu', '')).lower():
+passed_all = False
+
+if user_input['ram'] != 'All' and 
+user_input['ram'].lower().replace(' gb', '') not in str(laptop.get('ram', '')).lower():
+passed_all = False
+
+if user_input['os'] != 'All' and 
+user_input['os'].lower() not in str(laptop.get('os', '')).lower():
+passed_all = False
+
+if user_input['gpu_type'] != 'All' and 
+user_input['gpu_type'].lower() not in str(laptop.get('gpu_type', '')).lower():
+passed_all = False
+
+if user_input['panel_type'] != 'All' and 
+user_input['panel_type'].lower() not in str(laptop.get('panel_type', '')).lower():
+passed_all = False
+
+if user_input['screen_quality'] != 'All' and 
+user_input['screen_quality'].lower() not in str(laptop.get('screen_quality', '')).lower():
+passed_all = False
+\end{lstlisting}
+
+%-----------------------------------------------------------------------------%
+\subsection{\textit{Fallback Recommendation}}
+%-----------------------------------------------------------------------------%
+Apabila jumlah laptop pada kelompok \textit{strict match} belum mencapai enam item, sistem menerapkan mekanisme \textit{fallback recommendation}. Mekanisme ini digunakan untuk mengurangi kemungkinan hasil rekomendasi kosong atau terlalu sedikit ketika filter yang diberikan pengguna terlalu ketat.
+
+Pada mekanisme ini, sistem menambahkan kandidat laptop dari hasil pemeringkatan awal yang masih memenuhi batasan utama, terutama batas harga pengguna. Kandidat tersebut dimasukkan sebagai \textit{relaxed match}, yaitu kandidat yang tidak memenuhi seluruh filter, tetapi masih layak ditampilkan karena berasal dari hasil pemeringkatan berbasis skor kemiripan dan masih memenuhi batasan harga. Dengan demikian, sistem tetap dapat menampilkan rekomendasi yang cukup kepada pengguna.
+
+Potongan kode berikut menunjukkan mekanisme pemisahan kandidat ke dalam kelompok \textit{strict match} dan \textit{relaxed match}, serta proses penambahan kandidat fallback apabila hasil belum mencapai enam laptop.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Fallback Recommendation}, label=kode:fallback_recommendation]
+if passed_all and rec['score'] > 0:
+strict_matches.append(laptop)
+elif passed_price:
+relaxed_matches.append(laptop)
+
+final_results = strict_matches[:6]
+is_fallback = False
+
+if len(final_results) < 6:
+needed = 6 - len(final_results)
+final_results.extend(relaxed_matches[:needed])
+
+if len(relaxed_matches) > 0:
+    is_fallback = True
+\end{lstlisting}
+
+%-----------------------------------------------------------------------------%
+\subsection{Top-6 Rekomendasi}
+%-----------------------------------------------------------------------------%
+Tahap akhir dari proses rekomendasi adalah penyusunan hasil \textit{Top-6}. Sistem mengambil maksimal enam laptop dari hasil akhir yang terdiri dari kandidat \textit{strict match} dan, apabila diperlukan, kandidat \textit{relaxed match} dari mekanisme \textit{fallback recommendation}.
+
+Setiap hasil rekomendasi dilengkapi dengan skor kemiripan dan penjelasan singkat mengenai alasan laptop tersebut direkomendasikan. Penjelasan ini dibentuk berdasarkan karakteristik laptop dan deskripsi kebutuhan pengguna, seperti kebutuhan untuk kuliah, pemrograman, desain, mobilitas, pekerjaan kantor, atau \textit{gaming}. Daftar \textit{Top-6} inilah yang ditampilkan kepada pengguna sebagai keluaran utama sistem rekomendasi.
+
+Selain menjadi keluaran sistem, daftar \textit{Top-6} juga digunakan pada tahap evaluasi relevansi rekomendasi. Evaluasi tersebut dilakukan menggunakan metrik \textit{Precision@6}, \textit{Recall@6}, dan \textit{F1-Score@6} untuk mengetahui sejauh mana hasil rekomendasi sistem sesuai dengan daftar laptop yang dianggap relevan.
+
+%-----------------------------------------------------------------------------%
+\section{Implementasi Sistem Berbasis Web}
+%-----------------------------------------------------------------------------%
+Implementasi sistem berbasis web dilakukan untuk menyediakan media interaksi antara pengguna dan model rekomendasi. Sistem ini terdiri dari beberapa komponen utama, yaitu pengguna, \textit{frontend}, \textit{backend}, modul rekomendasi, dan dataset laptop dalam format JSON. Pembahasan implementasi sistem pada penelitian ini dibatasi pada komponen yang berkaitan langsung dengan alur rekomendasi, bukan pada detail desain antarmuka atau keseluruhan kode program \textit{frontend}.
+
+%-----------------------------------------------------------------------------%
+\subsection{Arsitektur Sistem}
+%-----------------------------------------------------------------------------%
+Arsitektur sistem pada penelitian ini terdiri atas beberapa komponen utama, yaitu pengguna, \textit{frontend}, \textit{backend}, modul rekomendasi, dan sumber data. Pengguna berinteraksi dengan sistem melalui antarmuka web untuk memasukkan deskripsi kebutuhan laptop dan memilih filter pendukung. Permintaan tersebut dikirimkan oleh \textit{frontend} ke \textit{backend} melalui layanan API. Selanjutnya, \textit{backend} memanggil modul \textit{LaptopRecommender} untuk memproses input pengguna menggunakan dataset laptop yang tersimpan dalam file \texttt{laptops.json}. Hasil rekomendasi yang diperoleh kemudian dikembalikan ke \textit{frontend} untuk ditampilkan kepada pengguna.
+
+Gambaran arsitektur sistem berbasis web pada penelitian ini ditunjukkan pada Gambar~\ref{fig:arsitektur_sistem}.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.95\textwidth, keepaspectratio]{assets/pics/Diagram/arsitektur_sistem.png}
+\caption{Arsitektur Sistem Berbasis Web}
+\label{fig:arsitektur_sistem}
+\end{figure}
+
+Gambar~\ref{fig:arsitektur_sistem} menunjukkan hubungan antara pengguna, \textit{frontend}, \textit{backend}, modul rekomendasi, dan dataset laptop. Pada sisi \textit{frontend}, React.js digunakan untuk membangun antarmuka sistem, termasuk halaman input kebutuhan pengguna dan halaman hasil rekomendasi. Melalui antarmuka tersebut, pengguna dapat menuliskan kebutuhan laptop menggunakan bahasa alami serta memilih filter pendukung, seperti batas harga, berat perangkat, ukuran layar, RAM, penyimpanan, sistem operasi, tipe GPU, tipe panel layar, dan kualitas layar.
+
+Pada sisi \textit{backend}, Flask digunakan sebagai penyedia layanan API yang menerima permintaan dari \textit{frontend}. Backend bertugas meneruskan input pengguna ke modul \textit{LaptopRecommender}. Modul rekomendasi tersebut menjalankan proses rekomendasi mulai dari preprocessing teks, pembobotan TF-IDF, normalisasi vektor, perhitungan \textit{Cosine Similarity}, penerapan filter terstruktur, mekanisme \textit{fallback}, hingga menghasilkan daftar rekomendasi \textit{Top-6}.
+
+Sumber data sistem berupa file \texttt{laptops.json}. File ini memuat data laptop yang digunakan oleh modul rekomendasi, termasuk informasi spesifikasi laptop dan field \texttt{usage} sebagai metadata utama untuk proses pencocokan berbasis konten. Field \texttt{usage} digunakan sebagai representasi teks dari setiap laptop dan menjadi korpus dokumen dalam proses pembobotan TF-IDF.
+
+Dengan arsitektur tersebut, sistem mampu memisahkan tanggung jawab antara antarmuka pengguna, layanan API, proses rekomendasi, dan sumber data. Pemisahan ini membuat alur kerja sistem menjadi lebih terstruktur, karena \textit{frontend} berfokus pada interaksi pengguna, \textit{backend} berfokus pada pengelolaan permintaan, modul \textit{LaptopRecommender} berfokus pada proses rekomendasi, dan file JSON berperan sebagai sumber data utama.
+
+%-----------------------------------------------------------------------------%
+\subsection{Alur \textit{Request} dan \textit{Response}}
+%-----------------------------------------------------------------------------%
+Alur \textit{request-response} pada sistem ini dimulai ketika pengguna memasukkan deskripsi kebutuhan laptop dan, jika diperlukan, memilih filter tambahan pada antarmuka web. Setelah itu, \textit{frontend} mengirimkan data input tersebut ke backend melalui API. Permintaan ini berisi deskripsi kebutuhan pengguna beserta parameter filter yang dipilih.
+
+Setelah menerima permintaan, backend memproses data tersebut dengan memanggil modul \textit{LaptopRecommender}. Modul ini memuat data laptop dari file \texttt{laptops.json}, kemudian memproses deskripsi pengguna menggunakan preprocessing teks, membentuk representasi TF-IDF, menghitung \textit{Cosine Similarity} terhadap metadata laptop, menerapkan filter terstruktur, dan menentukan hasil rekomendasi \textit{Top-6}.
+
+Hasil pemrosesan kemudian dikembalikan oleh backend ke \textit{frontend} dalam bentuk data rekomendasi. Selanjutnya, \textit{frontend} menampilkan daftar laptop yang direkomendasikan, beserta informasi utama seperti nama laptop, harga, spesifikasi singkat, gambar produk, dan tautan menuju halaman produk asli.
+
+Potongan kode berikut menunjukkan contoh endpoint backend yang menerima input pengguna dalam format JSON, membentuk objek \texttt{user\_input}, memanggil modul \texttt{LaptopRecommender}, dan mengembalikan hasil rekomendasi ke \textit{frontend}.
+
+\begin{lstlisting}[basicstyle=\linespread{0.8}\ttfamily\footnotesize, language=Python, breaklines=true, caption={Potongan Kode Endpoint API Rekomendasi}, label=kode:endpoint_api_rekomendasi]
+@app.route('/api/recommend', methods=['POST'])
+def recommend():
+    data = request.get_json()
+    user_input = {
+        "description": data.get('description', ''),
+        "max_price": float(data.get('max_price', 50000000)),
+        "max_weight": float(data.get('max_weight', 3.0)),
+        "max_screen": float(data.get('max_screen', 18.0)),
+        "cpu": data.get('cpu', 'All'),
+        "ram": data.get('ram', 'All'),
+        "storage": data.get('storage', 'All'),
+        "gpu_type": data.get('gpu_type', 'All')
+    }
+    hasil = ai_engine.get_recommendations(user_input)
+    return jsonify(hasil)
+\end{lstlisting}
+
+Dengan mekanisme ini, pengguna dapat memperoleh hasil rekomendasi secara interaktif tanpa berhubungan langsung dengan proses komputasi di backend. Gambaran alur \textit{request-response} pada sistem ditunjukkan pada Gambar~\ref{fig:alur_request_response}.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[height=0.52\textheight, keepaspectratio]{assets/pics/Diagram/alur_request_response.png}
+\caption{Alur \textit{Request} dan \textit{Response}}
+\label{fig:alur_request_response}
+\end{figure}
+
+Gambar~\ref{fig:alur_request_response} menunjukkan urutan proses ketika pengguna meminta rekomendasi laptop. Proses dimulai dari pengguna yang memasukkan deskripsi kebutuhan dan filter pada antarmuka sistem. Data tersebut kemudian dikirim oleh \textit{frontend} ke \textit{backend} untuk diproses. Backend memanggil modul \textit{LaptopRecommender} untuk memproses data input. Modul tersebut memuat data dari file \texttt{laptops.json}, melakukan preprocessing teks, pembobotan TF-IDF, perhitungan \textit{Cosine Similarity}, penerapan filter terstruktur, dan menghasilkan rekomendasi \textit{Top-6}. Hasil rekomendasi dikirim kembali ke \textit{frontend} dan ditampilkan kepada pengguna.
+
+%-----------------------------------------------------------------------------%
+\section{Pengujian Relevansi Rekomendasi}
+%-----------------------------------------------------------------------------%
+Pengujian relevansi rekomendasi dilakukan untuk mengetahui kesesuaian hasil rekomendasi laptop yang dihasilkan sistem terhadap kebutuhan pengguna. Pengujian ini berfokus pada hasil rekomendasi \textit{Top-6} yang diberikan oleh sistem berdasarkan deskripsi kebutuhan pengguna dan filter pendukung.
+
+Pada penelitian ini, evaluasi relevansi rekomendasi dilakukan menggunakan metrik \textit{Precision@6}, \textit{Recall@6}, dan \textit{F1-Score@6}. Ketiga metrik tersebut digunakan untuk mengukur tingkat relevansi hasil rekomendasi terhadap \textit{ground truth} yang dibentuk berdasarkan kriteria relevansi spesifikasi laptop terhadap kebutuhan pengguna.
+
+\noindent Secara umum, tahapan pengujian relevansi rekomendasi dilakukan sebagai berikut:
+\begin{enumerate}
+\item Menentukan skenario query yang merepresentasikan kebutuhan pengguna non-teknis atau non-ahli.
+\item Menjalankan sistem rekomendasi untuk setiap skenario query.
+\item Mengambil daftar hasil rekomendasi \textit{Top-6} dari sistem.
+\item Membentuk \textit{ground truth} berdasarkan kriteria relevansi spesifikasi laptop terhadap setiap skenario query.
+\item Membandingkan hasil rekomendasi \textit{Top-6} dengan \textit{ground truth}.
+\item Menghitung nilai \textit{Precision@6}, \textit{Recall@6}, dan \textit{F1-Score@6}.
+\item Menghitung nilai rata-rata dari seluruh skenario query.
+\end{enumerate}
+
+%-----------------------------------------------------------------------------%
+\subsection{Skenario Pengujian Rekomendasi}
+%-----------------------------------------------------------------------------%
+Skenario query digunakan untuk menguji kemampuan sistem dalam memahami kebutuhan pengguna dan menghasilkan rekomendasi laptop yang sesuai. Query disusun dalam bentuk deskripsi kebutuhan pengguna menggunakan bahasa alami agar sesuai dengan karakteristik pengguna non-teknis atau non-ahli.
+
+Pada penelitian ini, skenario query dirancang untuk mencakup beberapa kebutuhan umum pengguna laptop, seperti kebutuhan kuliah, pekerjaan kantor, desain grafis, \textit{editing}, \textit{gaming}, dan mobilitas tinggi. Selain deskripsi kebutuhan pengguna, sistem juga menyediakan filter pendukung seperti batas harga, berat perangkat, ukuran layar, RAM, penyimpanan, sistem operasi, tipe GPU, tipe panel layar, dan resolusi layar. Dalam pengujian, penggunaan filter ditentukan secara konsisten agar hasil rekomendasi dari setiap skenario dapat dievaluasi secara lebih terkontrol. Nilai filter yang digunakan pada setiap skenario pengujian dicatat bersama hasil pengujian agar proses evaluasi dapat ditelusuri kembali. Setiap skenario query kemudian dimasukkan ke dalam sistem untuk memperoleh hasil rekomendasi \textit{Top-6}.
+
+\noindent Skenario query yang digunakan dalam pengujian adalah sebagai berikut:
+\begin{enumerate}
+\item \textbf{Q1 - Produktivitas ringan} \\
+Laptop untuk kuliah, mengerjakan skripsi, browsing, mengetik, dan mengikuti kelas online.
+\item \textbf{Q2 - Produktivitas kerja} \\
+Laptop untuk kerja kantor, membuka banyak tab browser, meeting online, dan menjalankan aplikasi office.
+\item \textbf{Q3 - Desain grafis ringan} \\
+Laptop untuk desain grafis ringan, Canva, Photoshop, dan kebutuhan konten media sosial.
+\item \textbf{Q4 - Konten kreator} \\
+Laptop untuk editing video, desain, dan multitasking aplikasi kreatif.
+\item \textbf{Q5 - Gaming} \\
+Laptop untuk gaming, performa tinggi, dan menjalankan game berat dengan lancar.
+\item \textbf{Q6 - Mobilitas tinggi} \\
+Laptop yang ringan, mudah dibawa, cocok untuk kerja mobile, dan memiliki ukuran layar yang nyaman untuk dibawa.
+\end{enumerate}
+
+Skenario query tersebut digunakan sebagai dasar pengujian untuk melihat apakah sistem mampu memberikan rekomendasi yang sesuai dengan konteks kebutuhan pengguna. Hasil rekomendasi dari setiap query kemudian dibandingkan dengan \textit{ground truth} yang dibentuk berdasarkan kriteria relevansi spesifikasi laptop terhadap kebutuhan pada masing-masing skenario.
+
+%-----------------------------------------------------------------------------%
+\subsection{Pembentukan \textit{Ground Truth} Berbasis Kriteria Relevansi}
+%-----------------------------------------------------------------------------%
+\textit{Ground truth} digunakan sebagai data acuan untuk mengevaluasi relevansi hasil rekomendasi yang dihasilkan oleh sistem. Pada penelitian ini, \textit{ground truth} dibentuk melalui penilaian relevansi berbasis kriteria. Penilaian dilakukan dengan membandingkan kebutuhan pada setiap skenario query dengan spesifikasi laptop yang terdapat dalam dataset.
+
+Kriteria relevansi ditentukan berdasarkan kesesuaian antara kebutuhan pengguna dan karakteristik laptop, seperti prosesor, kartu grafis, kapasitas RAM, kapasitas penyimpanan, ukuran layar, berat perangkat, tipe panel layar, resolusi layar, serta harga. Setiap laptop pada dataset dinilai sebagai relevan atau tidak relevan terhadap masing-masing skenario query berdasarkan kriteria tersebut.
+
+Laptop yang memenuhi kriteria kebutuhan pada suatu skenario query diberi label relevan dan dimasukkan ke dalam himpunan \textit{ground truth}. Sebaliknya, laptop yang tidak memenuhi kriteria kebutuhan diberi label tidak relevan. Himpunan laptop relevan tersebut kemudian digunakan sebagai acuan dalam menghitung \textit{Precision@6}, \textit{Recall@6}, dan \textit{F1-Score@6}.
+
+Pendekatan ini digunakan agar evaluasi rekomendasi dapat dilakukan secara konsisten berdasarkan kriteria yang telah ditentukan. Namun, karena pembentukan \textit{ground truth} dilakukan berdasarkan kriteria relevansi yang disusun pada penelitian ini, hasil evaluasi digunakan sebagai pengukuran relevansi internal terhadap sistem yang dikembangkan, bukan sebagai ukuran mutlak atas seluruh kemungkinan preferensi pengguna.
+
+%-----------------------------------------------------------------------------%
+\subsection{\textit{Precision@6}}
+%-----------------------------------------------------------------------------%
+\textit{Precision@6} digunakan untuk mengukur proporsi laptop relevan yang muncul dalam enam hasil rekomendasi teratas. Metrik ini menunjukkan seberapa tepat sistem dalam menampilkan rekomendasi yang relevan kepada pengguna.
+
+Persamaan~\ref{eq:precision6_bab3} menunjukkan perhitungan \textit{Precision@6}.
+
+\addequation{\textit{Precision@6} Pengujian Rekomendasi}{
+\begin{equation}
+Precision_{6} = \frac{|R_6 \cap G|}{6}
+\label{eq:precision6_bab3}
+\end{equation}
+}
+
+\noindent dengan $R_6$ adalah himpunan enam laptop yang direkomendasikan oleh sistem, sedangkan $G$ adalah himpunan laptop relevan berdasarkan \textit{ground truth}. Nilai $|R_6 \cap G|$ menunjukkan jumlah laptop pada hasil rekomendasi \textit{Top-6} yang juga termasuk dalam \textit{ground truth}.
+
+Nilai \textit{Precision@6} yang semakin tinggi menunjukkan bahwa semakin banyak laptop relevan yang muncul dalam enam rekomendasi teratas.
+
+%-----------------------------------------------------------------------------%
+\subsection{\textit{Recall@6}}
+%-----------------------------------------------------------------------------%
+\textit{Recall@6} digunakan untuk mengukur proporsi laptop relevan yang berhasil ditemukan oleh sistem dari seluruh laptop relevan dalam \textit{ground truth}. Metrik ini menunjukkan kemampuan sistem dalam mengambil item relevan dari dataset.
+
+Persamaan~\ref{eq:recall6_bab3} menunjukkan perhitungan \textit{Recall@6}.
+
+\addequation{\textit{Recall@6} Pengujian Rekomendasi}{
+\begin{equation}
+Recall_{6} = \frac{|R_6 \cap G|}{|G|}
+\label{eq:recall6_bab3}
+\end{equation}
+}
+
+\noindent dengan $R_6$ adalah himpunan enam laptop yang direkomendasikan oleh sistem, sedangkan $G$ adalah himpunan laptop relevan berdasarkan \textit{ground truth}. Nilai $|G|$ menunjukkan jumlah seluruh laptop yang dinilai relevan berdasarkan kriteria relevansi terhadap query tertentu.
+
+Nilai \textit{Recall@6} yang semakin tinggi menunjukkan bahwa sistem semakin mampu menemukan laptop relevan dari keseluruhan laptop yang seharusnya relevan.
+
+%-----------------------------------------------------------------------------%
+\subsection{\textit{F1-Score@6}}
+%-----------------------------------------------------------------------------%
+\textit{F1-Score@6} digunakan untuk menggabungkan nilai \textit{Precision@6} dan \textit{Recall@6} ke dalam satu ukuran evaluasi. Metrik ini digunakan untuk melihat keseimbangan antara ketepatan sistem dalam menampilkan rekomendasi relevan dan kemampuan sistem dalam menemukan laptop relevan dari \textit{ground truth}.
+
+Persamaan~\ref{eq:f1score6_bab3} menunjukkan perhitungan \textit{F1-Score@6}.
+
+\addequation{\textit{F1-Score@6} Pengujian Rekomendasi}{
+\begin{equation}
+F1_{6} = \frac{2 \times (Precision_{6} \times Recall_{6})}{Precision_{6} + Recall_{6}}
+\label{eq:f1score6_bab3}
+\end{equation}
+}
+
+\noindent dengan $Precision_{6}$ adalah nilai \textit{Precision@6}, sedangkan $Recall_{6}$ adalah nilai \textit{Recall@6}. Apabila nilai $Precision_{6}$ dan $Recall_{6}$ sama-sama bernilai 0, maka nilai $F1_{6}$ ditetapkan sebesar 0 untuk menghindari pembagian dengan nol.
+
+Nilai \textit{F1-Score@6} yang tinggi menunjukkan bahwa sistem memiliki keseimbangan yang baik antara precision dan recall.
+
+Setelah nilai \textit{Precision@6}, \textit{Recall@6}, dan \textit{F1-Score@6} dihitung pada setiap skenario query, nilai akhir evaluasi relevansi rekomendasi diperoleh dengan menghitung rata-rata dari seluruh skenario pengujian.
+
+%-----------------------------------------------------------------------------%
+\section{Pengujian Usability}
+%-----------------------------------------------------------------------------%
+Pengujian usability dilakukan untuk mengetahui tingkat kemudahan penggunaan sistem rekomendasi laptop dari sudut pandang pengguna. Pengujian ini diperlukan karena sistem yang dikembangkan tidak hanya harus mampu menghasilkan rekomendasi laptop yang relevan, tetapi juga harus dapat digunakan dengan mudah oleh pengguna.
+
+Pada penelitian ini, pengujian usability dilakukan menggunakan metode \textit{System Usability Scale} (SUS). SUS digunakan sebagai instrumen utama karena memiliki bentuk kuesioner yang sederhana, mudah dipahami oleh responden, dan dapat menghasilkan skor kuantitatif untuk menilai tingkat usability sistem \cite{brooke1996sus}. Selain 10 pernyataan SUS, kuesioner juga memuat pertanyaan tambahan mengenai persepsi pengguna terhadap relevansi hasil rekomendasi, penggunaan filter, serta kritik dan saran untuk pengembangan sistem.
+
+Pengujian dilakukan setelah responden mencoba sistem rekomendasi laptop sesuai skenario penggunaan yang telah ditentukan. Dengan demikian, jawaban responden didasarkan pada pengalaman langsung ketika menggunakan sistem, bukan hanya berdasarkan penilaian terhadap tampilan antarmuka. Hasil dari pengujian usability digunakan untuk mengetahui tingkat penerimaan pengguna terhadap sistem dan sebagai bahan evaluasi terhadap aspek antarmuka, alur penggunaan, serta kemudahan pengguna dalam memahami hasil rekomendasi.
+
+%-----------------------------------------------------------------------------%
+\subsection{Responden}
+%-----------------------------------------------------------------------------%
+Responden pada pengujian usability merupakan pengguna yang telah mencoba sistem rekomendasi laptop dan mengisi kuesioner SUS. Responden memiliki tingkat pemahaman yang beragam terhadap spesifikasi teknis laptop, mulai dari pengguna awam hingga pengguna yang memahami detail spesifikasi seperti CPU, GPU, RAM, dan SSD.
+
+Pada penelitian ini, responden dikelompokkan berdasarkan tingkat pemahaman terhadap spesifikasi laptop, yaitu sangat tidak paham, kurang paham, cukup paham, dan sangat paham. Responden dengan tingkat pemahaman sangat tidak paham, kurang paham, dan cukup paham dikategorikan sebagai pengguna non-teknis. Sementara itu, responden dengan tingkat pemahaman sangat paham dikategorikan sebagai pengguna teknis. Pengelompokan ini digunakan untuk melihat hasil usability pada seluruh responden serta pada kelompok pengguna non-teknis sebagai sasaran utama sistem.
+
+\noindent Kriteria responden pada penelitian ini adalah sebagai berikut:
+\begin{enumerate}
+    \item Responden merupakan pengguna komputer atau laptop dalam aktivitas sehari-hari.
+    \item Responden memiliki pengalaman atau kemungkinan dalam memilih laptop untuk kebutuhan tertentu.
+    \item Responden dapat menggunakan aplikasi berbasis web.
+    \item Responden bersedia mencoba sistem rekomendasi laptop dan mengisi kuesioner usability.
+\end{enumerate}
+
+Dengan melibatkan responden yang memiliki tingkat pemahaman teknis yang beragam, pengujian usability diharapkan dapat memberikan gambaran mengenai kemudahan penggunaan sistem bagi pengguna umum, terutama pengguna non-teknis sebagai sasaran utama sistem. Jumlah responden, distribusi tingkat pemahaman responden, serta hasil analisis usability berdasarkan kelompok responden dijelaskan lebih lanjut pada Bab IV.
+
+%-----------------------------------------------------------------------------%
+\subsection{Skenario Penggunaan}
+%-----------------------------------------------------------------------------%
+Skenario penggunaan disusun untuk memastikan bahwa setiap responden mencoba fitur utama sistem sebelum mengisi kuesioner usability. Responden diminta menggunakan sistem rekomendasi laptop seperti pengguna sebenarnya, yaitu dengan memasukkan kebutuhan laptop dan melihat hasil rekomendasi yang diberikan oleh sistem.
+
+Skenario penggunaan yang dilakukan oleh responden adalah sebagai berikut:
+\begin{enumerate}
+    \item Responden membuka halaman utama sistem rekomendasi laptop.
+    \item Responden memasukkan deskripsi kebutuhan laptop menggunakan bahasa sehari-hari, misalnya kebutuhan untuk kuliah, pekerjaan kantor, desain grafis, \textit{editing}, \textit{gaming}, atau mobilitas tinggi.
+    \item Responden menentukan batas harga maksimum laptop yang diinginkan, misalnya Rp 5.000.000,00 atau Rp 10.000.000,00. Apabila responden tidak menentukan batas harga secara khusus, sistem menggunakan nilai \textit{default} sebesar Rp 25.000.000,00.
+    \item Responden mencoba menggunakan filter pendukung apabila diperlukan, seperti merek CPU, RAM, penyimpanan, ukuran layar, berat perangkat, tipe GPU, tipe panel layar, atau kualitas layar.
+    \item Responden menekan tombol rekomendasi untuk memproses kebutuhan yang telah dimasukkan.
+    \item Responden melihat hasil rekomendasi laptop \textit{Top-6} yang ditampilkan oleh sistem.
+    \item Responden membaca informasi laptop yang direkomendasikan, seperti nama produk, harga, spesifikasi utama, gambar produk, dan tautan menuju halaman produk.
+    \item Setelah selesai mencoba sistem, responden mengisi kuesioner usability berdasarkan pengalaman penggunaan sistem.
+\end{enumerate}
+
+Skenario tersebut digunakan agar responden dapat menilai sistem berdasarkan pengalaman penggunaan secara langsung. Penilaian usability tidak hanya berfokus pada tampilan antarmuka, tetapi juga pada kemudahan alur penggunaan, kemudahan memahami hasil rekomendasi, dan kemudahan menggunakan fitur filter.
+
+%-----------------------------------------------------------------------------%
+\subsection{Kuesioner SUS}
+%-----------------------------------------------------------------------------%
+Kuesioner usability pada penelitian ini terdiri dari beberapa bagian, yaitu data profil responden, tingkat pemahaman responden terhadap spesifikasi teknis laptop, 10 pernyataan SUS, dua pertanyaan tambahan, serta kritik dan saran. Pernyataan SUS digunakan sebagai dasar perhitungan skor usability, sedangkan pertanyaan tambahan digunakan sebagai data pendukung dalam analisis hasil pengujian.
+
+Skala penilaian yang digunakan pada kuesioner adalah skala 1 sampai 5. Nilai 1 menunjukkan sangat tidak setuju, sedangkan nilai 5 menunjukkan sangat setuju. Skala penilaian yang digunakan pada kuesioner ditunjukkan pada Tabel~\ref{tab:skala_sus}.
+
+\begin{table}[htbp]
+\centering
+\caption{Skala Penilaian Kuesioner SUS}
+\label{tab:skala_sus}
+\begin{tabular}{|c|l|}
+\hline
+\textbf{Nilai} & \textbf{Keterangan} \\ \hline
+1 & Sangat Tidak Setuju \\ \hline
+2 & Tidak Setuju \\ \hline
+3 & Netral \\ \hline
+4 & Setuju \\ \hline
+5 & Sangat Setuju \\ \hline
+\end{tabular}
+\end{table}
+
+Pernyataan SUS pada penelitian ini disesuaikan dengan konteks sistem rekomendasi laptop tanpa mengubah pola dasar instrumen, yaitu lima pernyataan positif dan lima pernyataan negatif. Pernyataan SUS yang digunakan dalam penelitian ini adalah sebagai berikut:
+\begin{enumerate}
+    \item Saya berpikir akan sering menggunakan sistem rekomendasi laptop ini, misalnya saat saya atau kenalan saya butuh saran membeli laptop.
+    \item Saya merasa sistem ini terlalu rumit, padahal bisa dibuat lebih sederhana.
+    \item Saya merasa sistem ini sangat mudah digunakan.
+    \item Saya merasa membutuhkan bantuan dari orang teknis atau orang IT untuk bisa menggunakan sistem ini.
+    \item Saya merasa fitur-fitur dan alur di dalam sistem ini berjalan dengan lancar dan terintegrasi dengan baik.
+    \item Saya merasa ada banyak hal yang tidak konsisten atau membingungkan dalam sistem ini.
+    \item Saya merasa mayoritas orang akan dapat mempelajari cara menggunakan sistem ini dengan sangat cepat.
+    \item Saya merasa sistem ini sangat merepotkan untuk digunakan.
+    \item Saya merasa sangat yakin dan nyaman saat menggunakan sistem ini.
+    \item Saya merasa harus belajar banyak hal baru terlebih dahulu sebelum bisa menggunakan sistem ini.
+\end{enumerate}
+
+Pernyataan bernomor ganjil merupakan pernyataan positif, sedangkan pernyataan bernomor genap merupakan pernyataan negatif. Pola tersebut digunakan sesuai dengan karakteristik instrumen SUS, sehingga proses perhitungan skor dilakukan dengan aturan yang berbeda antara pernyataan positif dan pernyataan negatif.
+
+Selain 10 pernyataan SUS, kuesioner juga memuat dua pertanyaan tambahan. Pertanyaan tambahan pertama digunakan untuk mengetahui persepsi responden terhadap relevansi laptop yang dimunculkan oleh sistem berdasarkan deskripsi kebutuhan yang diketikkan. Pertanyaan tambahan kedua digunakan untuk mengetahui apakah fitur filter berhasil menyaring data sesuai batasan yang dipilih responden.
+
+Dua pertanyaan tambahan tersebut tidak dimasukkan ke dalam perhitungan skor SUS. Pertanyaan tersebut digunakan sebagai data pendukung untuk memperkuat analisis usability dan persepsi pengguna terhadap hasil rekomendasi serta fitur filter. Selain itu, kritik dan saran dari responden digunakan sebagai masukan kualitatif untuk mengetahui aspek sistem yang masih dapat dikembangkan.
+
+%-----------------------------------------------------------------------------%
+\subsection{Analisis Skor SUS}
+%-----------------------------------------------------------------------------%
+Analisis skor SUS dilakukan terhadap 10 pernyataan utama SUS. Setiap jawaban responden dikonversi menjadi skor kontribusi berdasarkan posisi pernyataan. Untuk pernyataan bernomor ganjil, skor kontribusi diperoleh dengan mengurangi nilai jawaban responden dengan 1. Untuk pernyataan bernomor genap, skor kontribusi diperoleh dengan mengurangi 5 dengan nilai jawaban responden.
+
+Setelah seluruh skor kontribusi diperoleh, skor kontribusi dari 10 pernyataan dijumlahkan. Jumlah skor tersebut kemudian dikalikan dengan 2,5 sehingga menghasilkan skor SUS dalam rentang 0 sampai 100. Semakin tinggi skor SUS, semakin baik tingkat usability sistem menurut responden.
+
+Rumus perhitungan skor SUS setiap responden ditunjukkan pada Persamaan~\ref{eq:sus_bab3}.
+
+\addequation{Skor SUS per Responden}{
+\begin{equation}
+\label{eq:sus_bab3}
+SUS_i=\left(\sum_{j \in \{1,3,5,7,9\}} (Q_{ij} - 1)+\sum_{j \in \{2,4,6,8,10\}} (5 - Q_{ij})\right)\times 2{,}5
+\end{equation}
+}
+
+Keterangan:
+\begin{itemize}
+    \item $SUS_i$ adalah skor SUS responden ke-$i$.
+    \item $Q_{ij}$ adalah nilai jawaban responden ke-$i$ pada pernyataan ke-$j$.
+    \item Pernyataan ganjil, yaitu nomor 1, 3, 5, 7, dan 9, merupakan pernyataan positif.
+    \item Pernyataan genap, yaitu nomor 2, 4, 6, 8, dan 10, merupakan pernyataan negatif.
+\end{itemize}
+
+Tahapan perhitungan skor SUS pada penelitian ini adalah sebagai berikut:
+\begin{enumerate}
+    \item Mengumpulkan jawaban responden terhadap 10 pernyataan SUS.
+    \item Menghitung skor kontribusi untuk setiap pernyataan.
+    \item Menjumlahkan skor kontribusi dari seluruh pernyataan SUS.
+    \item Mengalikan jumlah skor kontribusi dengan 2,5 untuk memperoleh skor SUS setiap responden.
+    \item Menghitung nilai rata-rata skor SUS dari seluruh responden.
+    \item Menginterpretasikan nilai rata-rata skor SUS untuk mengetahui tingkat usability sistem.
+\end{enumerate}
+
+Nilai akhir pengujian usability diperoleh dari rata-rata skor SUS seluruh responden. Rumus perhitungan rata-rata skor SUS ditunjukkan pada Persamaan~\ref{eq:rata_sus}.
+
+\addequation{Rata-Rata Skor SUS}{
+\begin{equation}
+\label{eq:rata_sus}
+\overline{SUS} = \frac{\sum_{i=1}^{n} SUS_i}{n}
+\end{equation}
+}
+
+Keterangan:
+\begin{itemize}
+    \item $\overline{SUS}$ adalah rata-rata skor SUS.
+    \item $SUS_i$ adalah skor SUS responden ke-$i$.
+    \item $n$ adalah jumlah responden.
+\end{itemize}
+
+Interpretasi skor SUS pada penelitian ini digunakan untuk mengetahui tingkat usability sistem berdasarkan nilai rata-rata yang diperoleh. Kategori interpretasi skor SUS ditunjukkan pada Tabel~\ref{tab:interpretasi_sus}.
+
+\begin{table}[htbp]
+\centering
+\caption{Interpretasi Skor SUS}
+\label{tab:interpretasi_sus}
+\begin{tabular}{|c|l|}
+\hline
+\textbf{Rentang Skor SUS} & \textbf{Interpretasi} \\ \hline
+$< 50$ & Tidak dapat diterima \\ \hline
+$50 - 70$ & Cukup atau marginal \\ \hline
+$70 - 85$ & Dapat diterima \\ \hline
+$> 85$ & Sangat baik \\ \hline
+\end{tabular}
+\end{table}
+
+Pertanyaan tambahan mengenai relevansi hasil rekomendasi dan keberhasilan filter dianalisis secara deskriptif berdasarkan nilai jawaban responden. Analisis deskriptif dilakukan dengan melihat kecenderungan jawaban responden terhadap pertanyaan tambahan tersebut. Sementara itu, kritik dan saran dari responden digunakan sebagai masukan kualitatif untuk mengetahui aspek sistem yang masih dapat dikembangkan.
+
+Hasil akhir pengujian usability diperoleh dari nilai rata-rata skor SUS seluruh responden. Selain itu, analisis pada Bab IV juga dilakukan berdasarkan kelompok responden, yaitu pengguna non-teknis dan pengguna teknis. Analisis kelompok digunakan untuk melihat apakah sistem tetap mudah digunakan oleh sasaran utama penelitian, yaitu pengguna non-teknis.
+
+Sebagai analisis tambahan, penelitian ini juga membandingkan nilai rata-rata skor SUS berdasarkan jumlah responden secara bertahap. Perbandingan ini dilakukan untuk melihat kecenderungan stabilitas skor usability ketika jumlah responden bertambah. Dengan analisis tersebut, dapat diketahui apakah skor SUS yang diperoleh pada jumlah responden yang lebih kecil masih mengalami perubahan besar atau sudah mulai menunjukkan nilai yang relatif stabil ketika jumlah responden mendekati atau melebihi 30 orang. Hasil perhitungan skor SUS, analisis berdasarkan kelompok responden, analisis stabilitas skor berdasarkan jumlah responden, pertanyaan tambahan, serta ringkasan kritik dan saran responden disajikan pada Bab IV.

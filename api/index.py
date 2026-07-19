@@ -56,7 +56,6 @@ def recommend():
         }
 
         # 3. Masukkan ke fungsi penghitung TF-IDF dan Cosine Similarity di recommender.py
-        # PENTING: Pastikan fungsi get_recommendations milik Anda siap menerima dictionary 'user_input' ini
         hasil = ai_engine.get_recommendations(user_input)
         
         # 4. Kembalikan hasilnya ke React dalam bentuk JSON

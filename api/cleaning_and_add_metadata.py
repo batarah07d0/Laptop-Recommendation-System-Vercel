@@ -1,18 +1,45 @@
 import re
+from pathlib import Path
 
 import pandas as pd
 
 # =========================
 # 1. LOAD DATA
 # =========================
-# Pastikan path ini sesuai dengan lokasi file dataset
-df = pd.read_excel('datasets/laptop_data_agres.xlsx')
+BASE_DIR = Path(__file__).resolve().parent
+INPUT_PATH = BASE_DIR / "datasets" / "laptop_data_agres.xlsx"
+OUTPUT_PATH = BASE_DIR / "datasets" / "laptop_data_agres_with_metadata.xlsx"
+
+if not INPUT_PATH.exists():
+    raise FileNotFoundError(f"Dataset sumber tidak ditemukan: {INPUT_PATH}")
+
+df = pd.read_excel(INPUT_PATH)
 
 # =========================
-# 2. CLEANING TEXT
+# 2. CLEANING TEXT (Dipakai di Metadata Builder)
 # =========================
 def clean_text(text):
     text = str(text).lower()
+
+    # Normalisasi frasa domain agar diperlakukan sebagai satu term
+    phrase_patterns = [
+        (r'\b(?:main\s+)?(?:game|gaming)\s+(?:kasual\s+)?ringan\b', 'game_ringan'),
+        (r'\b(?:game|gaming)\s+menengah\b', 'game_menengah'),
+        (r'\b(?:game|gaming)\s+(?:berat|extreme|ekstrem)\b', 'game_berat'),
+        (r'\bedit(?:ing)?\s+video\s+ringan\b', 'edit_video_ringan'),
+        (r'\bdesain\s+grafis\s+ringan\b', 'desain_grafis_ringan'),
+        (r'\bgrafis\s+ringan\s+bawaan\b', 'grafis_bawaan'),
+        (r'\bpenggunaan\s+ringan\b', 'penggunaan_ringan'),
+        (r'\bultra\s+ringan\b', 'bobot_sangat_ringan'),
+        (r'\b(?:laptop|notebook|bobot)\s+ringan\b', 'bobot_ringan'),
+        (r'\bringan\s+(?:dan\s+)?mudah\s+dibawa\b', 'bobot_ringan'),
+    ]
+
+    for pattern, replacement in phrase_patterns:
+        text = re.sub(pattern, replacement, text)
+
+    # Jangan mengubah setiap kata "ringan" secara otomatis karena
+    # maknanya dapat berbeda, misalnya game ringan dan bobot ringan.
 
     # Fix desimal (15,6 → 15.6)
     text = re.sub(r'(\d+),(\d+)', r'\1.\2', text)
@@ -33,6 +60,95 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text).strip()
 
     return text
+
+def normalize_feature_token(text):
+    """Ubah satu fitur/label menjadi satu token yang konsisten."""
+    text = str(text).lower().strip()
+
+    canonical_patterns = [
+        (r'\b(?:main\s+)?(?:game|gaming)\s+(?:kasual\s+)?ringan\b', 'game_ringan'),
+        (r'\b(?:game|gaming)\s+menengah\b', 'game_menengah'),
+        (r'\b(?:game|gaming)\s+(?:berat|extreme|ekstrem)\b', 'game_berat'),
+        (r'\bedit(?:ing)?\s+video\s+ringan\b', 'edit_video_ringan'),
+        (r'\bdesain\s+grafis\s+ringan\b', 'desain_grafis_ringan'),
+        (r'\bgrafis\s+ringan\s+bawaan\b', 'grafis_bawaan'),
+        (r'\bpenggunaan\s+ringan\b', 'penggunaan_ringan'),
+        (r'\bultra\s+ringan\b', 'bobot_sangat_ringan'),
+        (r'\b(?:laptop|notebook|bobot)\s+ringan\b', 'bobot_ringan'),
+        (r'\bringan\s+(?:dan\s+)?mudah\s+dibawa\b', 'bobot_ringan'),
+        (r'^ringan$', 'bobot_ringan'),
+    ]
+
+    for pattern, replacement in canonical_patterns:
+        text = re.sub(pattern, replacement, text)
+
+    text = re.sub(r'[^a-z0-9_\.\s]', ' ', text)
+    text = re.sub(r'\s+', '_', text).strip('_')
+    text = re.sub(r'_+', '_', text)
+    return text
+
+
+def join_unique_features(features):
+    """Normalisasi seluruh fitur lalu hapus duplikasi setelah normalisasi."""
+    normalized = []
+    seen = set()
+
+    for feature in features:
+        token = normalize_feature_token(feature)
+        if token and token not in seen:
+            seen.add(token)
+            normalized.append(token)
+
+    return " ".join(normalized)
+
+
+def normalize_name_token(text):
+    """Ubah nama produk menjadi token utuh, misalnya acer_aspire_go_14."""
+    text = str(text).lower().strip()
+    text = re.sub(r'(\d+),(\d+)', r'\1.\2', text)
+    text = re.sub(r'[^a-z0-9\.]+', '_', text)
+    text = re.sub(r'_+', '_', text).strip('_')
+    return text
+
+
+def build_name_tokens(name, brand):
+    """Bentuk token nama lengkap dan nama model tanpa merek."""
+    full_name = normalize_name_token(name)
+    brand_token = normalize_name_token(brand)
+
+    tokens = []
+    if full_name:
+        tokens.append(full_name)
+
+    prefix = f"{brand_token}_" if brand_token else ""
+    if prefix and full_name.startswith(prefix):
+        model_name = full_name[len(prefix):]
+        if model_name:
+            tokens.append(model_name)
+
+    return list(dict.fromkeys(tokens))
+
+def is_dedicated_gpu_text(gpu_text):
+    """Deteksi GPU dedicated dengan aturan yang dipakai tag dan label."""
+    gpu_text = str(gpu_text).lower()
+    return (
+        any(name in gpu_text for name in ["rtx", "gtx", "geforce", "nvidia", "8060s"])
+        or bool(re.search(r'\brx\s*\d+', gpu_text))
+    )
+
+
+def is_modern_integrated_gpu_text(gpu_text):
+    """Deteksi GPU integrated modern dengan aturan yang konsisten."""
+    gpu_text = str(gpu_text).lower()
+    return (
+        "arc" in gpu_text
+        or "iris" in gpu_text
+        or any(
+            name in gpu_text
+            for name in ["680m", "660m", "840m", "860m", "780m", "890m"]
+        )
+    )
+
 
 # =========================
 # 3. FEATURE ENGINEERING
@@ -107,8 +223,8 @@ def generate_tags(row):
     is_gpu_dedicated = False
     is_gpu_mid_integrated = False
     
-    # A. GPU Dedicated (Gaming Berat) -> RTX series & Apple
-    if "rtx" in gpu or "8060s" in gpu or "apple" in gpu:
+    # A. GPU dedicated untuk kebutuhan grafis dan gaming
+    if is_dedicated_gpu_text(gpu):
         is_gpu_dedicated = True
         if any(x in gpu for x in ["5070", "5080", "5090", "4080", "4090"]): 
             tags.append("gpu kelas atas")
@@ -116,7 +232,7 @@ def generate_tags(row):
             tags.append("gpu kelas menengah")
             
     # B. GPU Integrated Modern (Gaming Menengah) -> Arc, Iris Xe, Radeon 600M/800M
-    elif "arc" in gpu or "iris" in gpu or any(x in gpu for x in ["680m", "660m", "840m", "860m", "780m", "890m"]):
+    elif is_modern_integrated_gpu_text(gpu):
         is_gpu_mid_integrated = True
         tags.append("grafis menengah modern")
         
@@ -151,7 +267,7 @@ def generate_tags(row):
         else:
             tags.append("gaming ringan")
     else:
-        tags.append("gaming kasual ringan")
+        tags.append("penggunaan harian")
 
     # 5. BERAT, LAYAR, DAN BATERAI
     if pd.notna(berat):
@@ -175,7 +291,12 @@ def generate_tags(row):
     elif any(x in resolusi for x in ["fhd", "1920", "wuxga"]): tags.append("resolusi standar")
     else: tags.append("resolusi rendah")
 
-    if re.search(r'\d+u\b', cpu) or "apple" in cpu or "evo" in cpu or "v" in cpu:
+    if (
+        re.search(r'\d+u\b', cpu)
+        or re.search(r'\d+v\b', cpu)
+        or "apple" in cpu
+        or "evo" in cpu
+    ):
         tags.extend(["baterai awet", "hemat daya", "tahan seharian", "awet buat nongkrong"])
     elif re.search(r'\d+hx?\b', cpu):
         tags.extend(["performa maksimal", "kencang", "butuh charger", "baterai standar"])
@@ -195,7 +316,6 @@ def generate_tags(row):
     if any(x in nama_laptop for x in ["touch", "x360", "spin", "flip", "2-in-1", "2in1", "yoga", "duo"]):
         tags.extend(["touchscreen", "layar sentuh", "bisa dilipat", "bisa jadi tablet", "buat nggambar", "stylus", "presentasi interaktif", "fleksibel"])
 
-
     # ==========================================
     # USE CASE & KEYWORDS EKSPANSI
     # ==========================================
@@ -211,7 +331,7 @@ def generate_tags(row):
         tags.append("cocok multimedia")
 
     if any(x in tags for x in ["performa dasar", "performa menengah", "grafis ringan bawaan", "penggunaan ringan"]):
-        tags.extend(["nugas", "skripsi", "kuliah", "sekolah", "pelajar", "mahasiswa", "browsing", "internet", "zoom", "meeting", "nonton", "film", "youtube", "word", "excel", "presentasi", "ppt"])
+        tags.extend(["nugas", "skripsi", "kuliah", "sekolah", "pelajar", "mahasiswa", "browsing", "internet", "zoom", "meeting", "nonton film", "youtube", "word", "excel", "presentasi", "ppt"])
 
     if any(x in tags for x in ["performa tinggi", "performa sangat tinggi", "multitasking lancar", "multitasking ekstrem"]):
         tags.extend(["kantor", "buka banyak tab", "banyak aplikasi", "anti lelet", "anti lemot", "coding", "ngoding", "programming", "programmer", "software", "analis data", "data science", "developer", "lancar jaya"])
@@ -228,7 +348,7 @@ def generate_tags(row):
     if "layar oled" in tags or "resolusi tinggi" in tags or "resolusi ultra tinggi" in tags:
         tags.extend(["nonton netflix", "kualitas bioskop", "warna akurat", "manjakan mata", "desainer", "warna tajam"])
 
-    return " ".join(dict.fromkeys(tags))
+    return join_unique_features(tags)
 
 # =========================
 # 4B. AUTO LABELING
@@ -286,14 +406,8 @@ def generate_label(row):
     # =========================
     # GPU CLASS
     # =========================
-    gpu_dedicated = any(x in gpu for x in [
-        'rtx', 'gtx', 'geforce', 'nvidia', 'rx '
-    ])
-
-    gpu_modern_integrated = any(x in gpu for x in [
-        'iris', 'arc', '680m', '660m', '780m',
-        '840m', '860m', '890m'
-    ])
+    gpu_dedicated = is_dedicated_gpu_text(gpu)
+    gpu_modern_integrated = is_modern_integrated_gpu_text(gpu)
 
     if gpu_dedicated:
         labels.extend([
@@ -465,32 +579,25 @@ def generate_label(row):
             ])
 
     # Hapus duplikasi kata/frasa
-    return " ".join(dict.fromkeys(labels))
+    return join_unique_features(labels)
 
 df['Auto_Tag'] = df.apply(generate_tags, axis=1)
 df['Label'] = df.apply(generate_label, axis=1)
 
 # =========================
-# 5. HELPER
+# 5. HELPER (Dipakai di Metadata Builder)
 # =========================
 def format_ram(v):
-    return f"ram {int(v)}gb" if pd.notna(v) else ""
+    return f"ram_{int(v)}gb" if pd.notna(v) else ""
 
 def format_storage(v):
     if pd.isna(v): return ""
-    if v >= 1024: return f"ssd {int(v/1024)}tb"
-    return f"ssd {int(v)}gb"
+    if v >= 1024: return f"ssd_{int(v/1024)}tb"
+    return f"ssd_{int(v)}gb"
 
 def format_layar(v):
-    return f"layar {float(v):.1f} inch" if pd.notna(v) else ""
+    return f"layar_{float(v):.1f}inch" if pd.notna(v) else ""
 
-def simplify_label(text):
-    text = str(text).lower()
-    text = re.sub(r'kinerja cepat|boot cepat|loading cepat', 'cepat', text)
-    text = re.sub(r'\bterjangkau\b', '', text)
-    text = re.sub(r'\bmenengah\b', '', text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
 
 def remove_duplicates(text):
     return " ".join(dict.fromkeys(text.split()))
@@ -501,25 +608,31 @@ def remove_duplicates(text):
 def build_metadata(row):
     parts = []
 
+    brand = str(row.get('Brand', ''))
+    product_name = str(row.get('Nama_Display', ''))
+
+    # Pertahankan nama asli untuk pencarian umum dan tambahkan nama utuh
+    # agar model seperti "Acer Aspire Go 14" tidak hanya terpecah per kata.
     parts.extend([
-        str(row.get('Brand', '')),
-        str(row.get('Nama_Display', '')),
+        brand,
+        product_name,
+        *build_name_tokens(product_name, brand),
         str(row.get('CPU', '')),
         str(row.get('GPU', ''))
     ])
 
     gpu = str(row.get('GPU', '')).lower()
     if "apple" in gpu:
-        parts.append("grafis apple")
+        parts.append("grafis_apple")
     elif any(x in gpu for x in ["uhd", "iris", "intel", "integrated"]):
-        parts.append("grafis terintegrasi")
+        parts.append("grafis_terintegrasi")
 
     parts.append(format_ram(row.get('RAM_Numeric')))
     parts.append(format_storage(row.get('Penyimpanan_Numeric')))
     parts.append(format_layar(row.get('Ukuran_Layar_Numeric')))
 
     parts.append(str(row.get('Auto_Tag', '')))
-    parts.append(simplify_label(row.get('Label', '')))
+    parts.append(str(row.get('Label', '')))
 
     # Pastikan tidak ada None/NaN/kosong masuk ke join()
     parts = [str(p) for p in parts if pd.notna(p) and str(p).strip() != ""]
@@ -535,6 +648,9 @@ df['Metadata'] = df.apply(build_metadata, axis=1)
 # =========================
 # 7. SAVE
 # =========================
-df.to_excel("datasets/laptop_data_agres_with_metadata.xlsx", index=False)
+OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+df.to_excel(OUTPUT_PATH, index=False)
 
-print("FINAL: Metadata sudah berhasil diterapkan dan disimpan!")
+print(f"Jumlah laptop            : {len(df)}")
+print(f"Metadata berhasil dibuat : {df['Metadata'].notna().sum()}")
+print(f"File Excel               : {OUTPUT_PATH}")

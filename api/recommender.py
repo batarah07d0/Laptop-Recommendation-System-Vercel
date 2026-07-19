@@ -2,118 +2,361 @@
 import json
 import math
 import re
-import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Dict, List, Sequence
+from typing import Dict, List, Tuple
 
 
 class LaptopRecommender:
     def __init__(self, laptops: List[Dict]):
         self.laptops = laptops
-        self.corpus = [self._preprocess(laptop.get('usage', '')) for laptop in laptops]
+        self.laptop_by_id = {
+            laptop.get("id"): laptop
+            for laptop in laptops
+            if laptop.get("id")
+        }
+        self.index_by_id = {
+            laptop.get("id"): index
+            for index, laptop in enumerate(laptops)
+            if laptop.get("id")
+        }
+
+        self.corpus = [
+            self._preprocess(laptop.get('usage', ''))
+            for laptop in laptops
+        ]
+
+        # Bentuk kamus frasa dari token metadata yang menggunakan underscore.
+        # Contoh: baterai_awet -> (baterai, awet) dan
+        # acer_aspire_go_14 -> (acer, aspire, go, 14). Kamus ini membuat
+        # query mengenali fitur dan nama model tanpa daftar manual terpisah.
+        phrase_terms = {
+            token
+            for document in self.corpus
+            for token in document
+            if "_" in token
+        }
+        self.phrase_lookup = {
+            tuple(token.split("_")): token
+            for token in phrase_terms
+        }
+        self.max_phrase_words = max(
+            (len(words) for words in self.phrase_lookup),
+            default=1
+        )
+
+        # Matriks antara disimpan agar proses TF, IDF, TF-IDF mentah,
+        # normalisasi, dan cosine similarity dapat ditampilkan saat debug.
+        # Perubahan ini tidak mengubah hasil rekomendasi utama.
+        self.document_frequency: Dict[str, int] = {}
+        self.idf: Dict[str, float] = {}
+        self.tf_matrix: List[Dict[str, float]] = []
+        self.tfidf_raw_matrix: List[Dict[str, float]] = []
+        self.vector_norms: List[float] = []
         self.tfidf_matrix = self._compute_tfidf()
 
-    # Fungsi untuk membersihkan dan menormalisasi teks (lowercase, hapus tanda baca, hapus stopwords)
-    def _preprocess(self, text: str) -> List[str]:
-        text = str(text).lower()
-        text = re.sub(r'[^a-z0-9\s]', '', text)
-        
-        stopwords = {
-            'dan', 'atau', 'untuk', 'dengan', 'yang', 'di', 'ke', 'dari', 'pada', 'adalah', 'ini', 'itu', 
-            'buat', 'sama', 'juga', 'sih', 'cuma', 'aja', 'nggak', 'gak', 'enggak', 'tidak', 'bukan',
-            'saya', 'aku', 'kamu', 'dia', 'mereka', 'kita', 'kami', 'halo', 'hai', 'mas', 'mbak', 'bang', 'kak',
-            'pengen', 'ingin', 'mau', 'beli', 'cari', 'carikan', 'tolong', 'dong', 'lagi', 'pas', 'bisa',
-            'ada', 'sesuatu', 'kalau', 'kalo', 'biar', 'sudah', 'udah', 'belum', 'sangat', 'paling'
+    @staticmethod
+    def _get_stopwords() -> set:
+        return {
+            'dan', 'atau', 'untuk', 'dengan', 'yang', 'di', 'ke', 'dari',
+            'pada', 'adalah', 'ini', 'itu', 'buat', 'saya', 'aku', 'pengen',
+            'ingin', 'mau', 'beli', 'cari', 'carikan', 'tolong', 'dong',
+            'tidak', 'bukan', 'sangat', 'paling', 'butuh', 'membutuhkan',
+            'mengerjakan', 'bermain', 'dipakai', 'digunakan', 'laptop', 'bisa', 'buka'
         }
-        return [word for word in text.split() if word not in stopwords]
 
-    # Fungsi untuk menghitung Term Frequency (TF) dari sebuah dokumen
+    # Bersihkan teks input dan normalisasi istilah domain laptop.
+    # Fungsi yang sama digunakan untuk metadata laptop dan query pengguna.
+    def _preprocess(
+        self,
+        text: str,
+        remove_stopwords: bool = True
+    ) -> List[str]:
+        text = str(text).lower()
+
+        # Normalisasi frasa domain agar diperlakukan sebagai satu term
+        phrase_patterns = [
+            (r'\b(?:main\s+)?(?:game|gaming)\s+(?:kasual\s+)?ringan\b', 'game_ringan'),
+            (r'\b(?:game|gaming)\s+menengah\b', 'game_menengah'),
+            (r'\b(?:game|gaming)\s+(?:berat|extreme|ekstrem)\b', 'game_berat'),
+            (r'\bedit(?:ing)?\s+video\s+ringan\b', 'edit_video_ringan'),
+            (r'\bdesain\s+grafis\s+ringan\b', 'desain_grafis_ringan'),
+            (r'\bgrafis\s+ringan\s+bawaan\b', 'grafis_bawaan'),
+            (r'\bpenggunaan\s+ringan\b', 'penggunaan_ringan'),
+            (r'\bultra\s+ringan\b', 'bobot_sangat_ringan'),
+            (r'\b(?:laptop|notebook|bobot)\s+ringan\b', 'bobot_ringan'),
+            (r'\bringan\s+(?:dan\s+)?mudah\s+dibawa\b', 'bobot_ringan'),
+        ]
+
+        for pattern, replacement in phrase_patterns:
+            text = re.sub(pattern, replacement, text)
+
+        # Kata "ringan" tidak langsung diubah karena konteksnya dapat
+        # merujuk pada game, pekerjaan, aplikasi, atau bobot perangkat.
+
+        text = re.sub(r'(\d+),(\d+)', r'\1.\2', text)
+
+        # Normalisasi angka desimal bulat: 14.0 -> 14
+        text = re.sub(r'\b(\d+)\.0\b', r'\1', text)
+
+        # Normalisasi GPU: RTX3050 / RTX-3050 -> rtx 3050
+        text = re.sub(
+            r'\b(rtx|gtx|rx)[-\s]*([0-9]{3,4})\b',
+            r'\1 \2',
+            text
+        )
+
+        # Normalisasi CPU Intel: i5-13420H -> i5 13420h
+        text = re.sub(
+            r'\b(i[3579])[-\s]*([0-9]{4,5}[a-z]{0,2})\b',
+            r'\1 \2',
+            text
+        )
+
+        # Normalisasi variasi penulisan satuan.
+        # Tahap ini hanya menyamakan bentuk teks dan tidak mengubah
+        # spesifikasi pada kueri menjadi filter otomatis.
+        text = re.sub(
+            r'\b(giga|gigabyte|gigabytes|gigabita)\b',
+            'gb',
+            text
+        )
+        text = re.sub(
+            r'\b(tera|terabyte|terabytes|terabita)\b',
+            'tb',
+            text
+        )
+        text = re.sub(r'\b(kilogram|kilo)\b', 'kg', text)
+        text = re.sub(r'\binci\b', 'inch', text)
+
+        # Samakan bentuk "16 GB" dan "16GB", serta bentuk satuan lain.
+        text = re.sub(
+            r'\b(\d+(?:\.\d+)?)\s*(gb|tb|kg|inch)\b',
+            r'\1\2',
+            text
+        )
+
+        # Hapus karakter yang tidak diperlukan, tetapi pertahankan titik
+        # karena masih dapat digunakan pada angka desimal seperti 1.5kg.
+        text = re.sub(r'[^a-z0-9_\.\s]', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        tokens = [word for word in text.split() if word]
+
+        if remove_stopwords:
+            stopwords = self._get_stopwords()
+            tokens = [word for word in tokens if word not in stopwords]
+
+        return tokens
+
+    def _merge_known_phrases(self, tokens: List[str]) -> List[str]:
+        """Gabungkan urutan kata query yang tersedia sebagai token frasa metadata."""
+        if not tokens or not self.phrase_lookup:
+            return tokens
+
+        merged: List[str] = []
+        index = 0
+
+        while index < len(tokens):
+            matched = False
+            remaining = len(tokens) - index
+            max_size = min(self.max_phrase_words, remaining)
+
+            for size in range(max_size, 1, -1):
+                candidate = tuple(tokens[index:index + size])
+                phrase_token = self.phrase_lookup.get(candidate)
+                if phrase_token:
+                    merged.append(phrase_token)
+                    index += size
+                    matched = True
+                    break
+
+            if not matched:
+                merged.append(tokens[index])
+                index += 1
+
+        return merged
+
+    def _preprocess_query(self, text: str) -> List[str]:
+        # Frasa digabungkan sebelum stopword dihapus agar token seperti
+        # performa_sangat_tinggi, acer_aspire_go_14, dan dibawa_ke_kampus
+        # tetap utuh.
+        tokens = self._preprocess(text, remove_stopwords=False)
+        tokens = self._merge_known_phrases(tokens)
+
+        stopwords = self._get_stopwords()
+        tokens = [token for token in tokens if token not in stopwords]
+
+        # Jika "ringan" menjadi satu-satunya kebutuhan bermakna, konteks
+        # yang paling wajar adalah bobot perangkat.
+        if tokens == ["ringan"] and "bobot_ringan" in self.idf:
+            return ["bobot_ringan"]
+
+        return tokens
+
+    # Hitung Term Frequency (TF) untuk satu dokumen.
     def _compute_tf(self, doc: List[str]) -> Dict[str, float]:
         tf = Counter(doc)
         total_words = len(doc)
-        return {word: count / total_words for word, count in tf.items()} if total_words > 0 else {}
+        return {
+            word: count / total_words for word, count in tf.items()
+        } if total_words > 0 else {}
 
-    # Fungsi untuk menghitung Inverse Document Frequency (IDF) dari seluruh korpus
+    # Hitung Inverse Document Frequency (IDF) untuk seluruh korpus.
     def _compute_idf(self) -> Dict[str, float]:
-        N = len(self.corpus)
+        document_count = len(self.corpus)
         df = defaultdict(int)
-        for doc in self.corpus:
-            unique_words = set(doc)
-            for word in unique_words:
-                df[word] += 1
-        return {word: math.log((1 + N) / (1 + count)) + 1 for word, count in df.items()}
 
-    # Fungsi untuk menghitung TF-IDF dari seluruh korpus
+        for doc in self.corpus:
+            # Setiap term hanya dihitung satu kali per dokumen.
+            for word in set(doc):
+                df[word] += 1
+
+        self.document_frequency = dict(df)
+        return {
+            word: math.log((1 + document_count) / (1 + count)) + 1
+            for word, count in df.items()
+        }
+
+    # Bangun TF, TF-IDF mentah, panjang vektor, dan TF-IDF ternormalisasi.
     def _compute_tfidf(self) -> List[Dict[str, float]]:
-        idf = self._compute_idf()
-        tfidf_matrix = []
+        self.idf = self._compute_idf()
+        self.tf_matrix = []
+        self.tfidf_raw_matrix = []
+        self.vector_norms = []
+        normalized_matrix: List[Dict[str, float]] = []
+
         for doc in self.corpus:
             tf = self._compute_tf(doc)
-            tfidf = {word: tf_val * idf.get(word, 0) for word, tf_val in tf.items()}
-            
-            norm = math.sqrt(sum(val**2 for val in tfidf.values()))
-            if norm > 0:
-                tfidf = {word: val / norm for word, val in tfidf.items()}
-            tfidf_matrix.append(tfidf)
-        return tfidf_matrix
+            tfidf_raw = {
+                word: tf_value * self.idf.get(word, 0.0)
+                for word, tf_value in tf.items()
+            }
 
-    # Fungsi untuk menghitung Cosine Similarity antara dua vektor TF-IDF
+            norm = math.sqrt(sum(value ** 2 for value in tfidf_raw.values()))
+            if norm > 0:
+                tfidf_normalized = {
+                    word: value / norm
+                    for word, value in tfidf_raw.items()
+                }
+            else:
+                tfidf_normalized = {}
+
+            self.tf_matrix.append(tf)
+            self.tfidf_raw_matrix.append(tfidf_raw)
+            self.vector_norms.append(norm)
+            normalized_matrix.append(tfidf_normalized)
+
+        return normalized_matrix
+
+    # Bentuk vektor query menggunakan IDF yang sudah dihitung dari korpus laptop.
+    # Query tidak dimasukkan ke korpus dan tidak mengubah statistik IDF.
+    def _vectorize_query(self, text: str) -> Dict:
+        tokens = self._preprocess_query(text)
+        tf = self._compute_tf(tokens)
+
+        # Hanya term yang dikenal oleh vocabulary korpus laptop yang dipakai.
+        tfidf_raw = {
+            word: tf_value * self.idf[word]
+            for word, tf_value in tf.items()
+            if word in self.idf
+        }
+
+        norm = math.sqrt(sum(value ** 2 for value in tfidf_raw.values()))
+        if norm > 0:
+            tfidf_normalized = {
+                word: value / norm
+                for word, value in tfidf_raw.items()
+            }
+        else:
+            tfidf_normalized = {}
+
+        return {
+            "tokens": tokens,
+            "tf": tf,
+            "tfidf_raw": tfidf_raw,
+            "norm": norm,
+            "tfidf_normalized": tfidf_normalized
+        }
+
+    # Hitung cosine similarity antar dua vektor TF-IDF.
     def _cosine_similarity(self, vec1: Dict[str, float], vec2: Dict[str, float]) -> float:
         intersection = set(vec1.keys()) & set(vec2.keys())
         dot_product = sum(vec1[word] * vec2[word] for word in intersection)
         return dot_product
     
-    # Fungsi untuk merekomendasikan laptop berdasarkan ID target dan jumlah rekomendasi yang diinginkan
+    # Bentuk ranking query terhadap seluruh laptop dengan IDF korpus tetap.
+    # Fungsi ini menjadi satu-satunya sumber ranking awal agar skrip utama,
+    # Bab IV, dan analisis skor menggunakan perhitungan yang sama.
+    def rank_query(self, text: str) -> Tuple[Dict, List[Dict]]:
+        query_info = self._vectorize_query(text)
+        query_vector = query_info.get("tfidf_normalized", {})
+
+        if not query_vector:
+            return query_info, []
+
+        rankings = []
+        for index, laptop_vector in enumerate(self.tfidf_matrix):
+            rankings.append({
+                "id": self.laptops[index].get("id"),
+                "score": self._cosine_similarity(query_vector, laptop_vector)
+            })
+
+        rankings.sort(
+            key=lambda item: item.get("score", 0.0),
+            reverse=True
+        )
+        return query_info, rankings
+
+    # Ambil rekomendasi laptop dengan skor tertinggi terhadap target query.
     def recommend(self, target_id: str, top_n: int = 5) -> List[Dict]:
         target_idx = next((i for i, laptop in enumerate(self.laptops) if laptop['id'] == target_id), None)
+
+        # Jika target_id tidak ditemukan, kembalikan daftar kosong.
         if target_idx is None:
-            raise ValueError(f"Laptop dengan ID {target_id} tidak ditemukan.")
+            return []
 
         target_vec = self.tfidf_matrix[target_idx]
         scores = []
+        
         for i, vec in enumerate(self.tfidf_matrix):
             if i != target_idx:
                 score = self._cosine_similarity(target_vec, vec)
                 scores.append({'id': self.laptops[i]['id'], 'score': score})
                 
+        # Urutkan hasil berdasarkan skor tertinggi dan ambil top N
         scores.sort(key=lambda x: x['score'], reverse=True)
         return scores[:top_n]
     
-    # Fungsi untuk mengambil tabel debug TF-IDF dan similarity.
-    # Fungsi ini hanya dipakai ketika file dijalankan langsung dari CLI.
+    # Kumpulkan data debug lengkap untuk kebutuhan Bab IV dan CLI.
     def _build_debug_info(
         self,
         user_input: Dict,
-        laptops_temp: List[Dict],
-        temp_recommender: "LaptopRecommender",
+        query_info: Dict,
         raw_recommendations: List[Dict],
         final_results: List[Dict],
         top_terms_n: int = 10,
         top_laptops_n: int = 3
     ) -> Dict:
-        dummy_user_id = "USER_QUERY_999"
-        query_idx = next(
-            (i for i, laptop in enumerate(laptops_temp) if laptop.get('id') == dummy_user_id),
-            None
-        )
+        query_tokens = query_info.get("tokens", [])
+        query_tf = query_info.get("tf", {})
+        query_tfidf_raw = query_info.get("tfidf_raw", {})
+        query_norm = query_info.get("norm", 0.0)
+        query_vector_normalized = query_info.get("tfidf_normalized", {})
 
-        if query_idx is None:
-            return {}
-
-        query_tokens = temp_recommender.corpus[query_idx]
-        query_vector = temp_recommender.tfidf_matrix[query_idx]
-
-        # Jika user_input memiliki debug_terms, pakai term tersebut agar tabel BAB IV rapi.
-        # Jika tidak ada, sistem otomatis mengambil term dengan bobot query tertinggi.
         custom_terms = user_input.get("debug_terms")
         if custom_terms:
-            selected_terms = [str(term).lower() for term in custom_terms]
+            selected_terms = []
+            for term in custom_terms:
+                processed = self._preprocess_query(str(term))
+                selected_terms.extend(processed if processed else [str(term).lower()])
+            selected_terms = list(dict.fromkeys(selected_terms))
         else:
             selected_terms = [
-                term for term, _ in sorted(
-                    query_vector.items(),
+                term
+                for term, _ in sorted(
+                    query_vector_normalized.items(),
                     key=lambda item: item[1],
                     reverse=True
                 )[:top_terms_n]
@@ -121,203 +364,378 @@ class LaptopRecommender:
 
         selected_laptops = final_results[:top_laptops_n]
 
-        id_to_index = {
-            laptop.get('id'): index
-            for index, laptop in enumerate(laptops_temp)
-        }
+        def build_matrix_table(
+            query_vector: Dict[str, float],
+            document_matrix: List[Dict[str, float]]
+        ) -> List[Dict]:
+            rows = []
+            for term in selected_terms:
+                row = {
+                    "term": term,
+                    "query": query_vector.get(term, 0.0)
+                }
+                for laptop in selected_laptops:
+                    laptop_id = laptop.get("id")
+                    laptop_idx = self.index_by_id.get(laptop_id)
+                    vector = document_matrix[laptop_idx] if laptop_idx is not None else {}
+                    row[laptop_id] = vector.get(term, 0.0)
+                rows.append(row)
+            return rows
 
-        tfidf_table = []
-        for term in selected_terms:
-            row = {
+        tf_table = build_matrix_table(query_tf, self.tf_matrix)
+        tfidf_raw_table = build_matrix_table(query_tfidf_raw, self.tfidf_raw_matrix)
+        tfidf_normalized_table = build_matrix_table(
+            query_vector_normalized,
+            self.tfidf_matrix
+        )
+
+        idf_table = [
+            {
                 "term": term,
-                "query": query_vector.get(term, 0.0)
+                "document_count": len(self.corpus),
+                "document_frequency": self.document_frequency.get(term, 0),
+                "idf": self.idf.get(term, 0.0)
             }
+            for term in selected_terms
+        ]
 
-            for laptop in selected_laptops:
-                laptop_id = laptop.get('id')
-                laptop_idx = id_to_index.get(laptop_id)
-                laptop_vector = temp_recommender.tfidf_matrix[laptop_idx] if laptop_idx is not None else {}
-                row[laptop_id] = laptop_vector.get(term, 0.0)
+        normalization_table = [
+            {
+                "document": "Query",
+                "id": "USER_QUERY",
+                "raw_vector_norm": query_norm,
+                "normalized_vector_norm": math.sqrt(
+                    sum(value ** 2 for value in query_vector_normalized.values())
+                )
+            }
+        ]
 
-            tfidf_table.append(row)
+        for laptop in selected_laptops:
+            laptop_id = laptop.get("id")
+            laptop_idx = self.index_by_id.get(laptop_id)
+            if laptop_idx is None:
+                continue
+
+            normalization_table.append({
+                "document": laptop.get("name", "-"),
+                "id": laptop_id,
+                "raw_vector_norm": self.vector_norms[laptop_idx],
+                "normalized_vector_norm": math.sqrt(
+                    sum(value ** 2 for value in self.tfidf_matrix[laptop_idx].values())
+                )
+            })
+
+        cosine_detail_table = []
+        for laptop in selected_laptops:
+            laptop_id = laptop.get("id")
+            laptop_idx = self.index_by_id.get(laptop_id)
+            if laptop_idx is None:
+                continue
+
+            laptop_raw_vector = self.tfidf_raw_matrix[laptop_idx]
+            laptop_norm = self.vector_norms[laptop_idx]
+            shared_terms = set(query_tfidf_raw) & set(laptop_raw_vector)
+
+            raw_dot_product = sum(
+                query_tfidf_raw[term] * laptop_raw_vector[term]
+                for term in shared_terms
+            )
+            denominator = query_norm * laptop_norm
+            cosine_from_raw = (
+                raw_dot_product / denominator
+                if denominator > 0
+                else 0.0
+            )
+            cosine_from_normalized = self._cosine_similarity(
+                query_vector_normalized,
+                self.tfidf_matrix[laptop_idx]
+            )
+
+            cosine_detail_table.append({
+                "id": laptop_id,
+                "brand": laptop.get("brand", "-"),
+                "name": laptop.get("name", "-"),
+                "shared_term_count": len(shared_terms),
+                "shared_terms": sorted(shared_terms),
+                "raw_dot_product": raw_dot_product,
+                "query_norm": query_norm,
+                "laptop_norm": laptop_norm,
+                "denominator": denominator,
+                "cosine_from_raw": cosine_from_raw,
+                "cosine_from_normalized": cosine_from_normalized
+            })
 
         similarity_table = []
         for idx, laptop in enumerate(final_results, 1):
             similarity_table.append({
                 "rank": idx,
-                "id": laptop.get('id', '-'),
-                "brand": laptop.get('brand', '-'),
-                "name": laptop.get('name', '-'),
-                "score": laptop.get('similarity_score', 0.0),
-                "price": laptop.get('price', 0.0)
+                "id": laptop.get("id", "-"),
+                "brand": laptop.get("brand", "-"),
+                "name": laptop.get("name", "-"),
+                "score": laptop.get("similarity_score", 0.0),
+                "price": laptop.get("price", 0.0)
             })
 
         return {
-            "query_original": user_input.get('description', ''),
+            "query_original": user_input.get("description", ""),
             "query_tokens": query_tokens,
+            "known_query_terms": sorted(query_tfidf_raw.keys()),
+            "unknown_query_terms": sorted(
+                set(query_tokens) - set(query_tfidf_raw.keys())
+            ),
+            "corpus_size": len(self.corpus),
             "selected_terms": selected_terms,
             "selected_laptops": [
                 {
-                    "id": laptop.get('id', '-'),
-                    "name": laptop.get('name', '-'),
-                    "brand": laptop.get('brand', '-')
+                    "id": laptop.get("id", "-"),
+                    "name": laptop.get("name", "-"),
+                    "brand": laptop.get("brand", "-")
                 }
                 for laptop in selected_laptops
             ],
-            "tfidf_table": tfidf_table,
+            "tf_table": tf_table,
+            "idf_table": idf_table,
+            "tfidf_raw_table": tfidf_raw_table,
+            "normalization_table": normalization_table,
+            "tfidf_normalized_table": tfidf_normalized_table,
+            "tfidf_table": tfidf_normalized_table,
+            "cosine_detail_table": cosine_detail_table,
             "similarity_table": similarity_table,
-            "raw_highest_score": max((rec.get('score', 0.0) for rec in raw_recommendations), default=0.0)
+            "raw_highest_score": max(
+                (rec.get("score", 0.0) for rec in raw_recommendations),
+                default=0.0
+            )
         }
 
-    # Fungsi untuk menghasilkan alasan mengapa laptop tertentu cocok dengan kebutuhan pengguna
-    def _generate_reason(self, user_input: Dict, laptop: Dict) -> str:
-        desc = user_input.get('description', '').lower()
-        
-        cpu = laptop.get('cpu', 'Prosesor Standar')
-        gpu = laptop.get('gpu', 'Grafis Bawaan')
-        storage = laptop.get('storage', '256 GB')
-        panel = laptop.get('panel_type', 'Layar Standar')
-        bobot = laptop.get('weight_kg', 'Standar')
-        
-        ram_str = str(laptop.get('ram', '8 GB'))
-        ram_match = re.search(r'(\d+)', ram_str)
-        ram_num = int(ram_match.group(1)) if ram_match else 8
-        
-        reasons = []
+    @staticmethod
+    def _classify_gpu_type(laptop: Dict) -> str:
+        """
+        Tentukan tipe GPU sebagai Dedicated, Integrated, atau Unknown.
 
-        # 1. Kebutuhan Gaming & 3D Render
-        if any(key in desc for key in ['game', 'gaming', 'render', '3d', 'berat']):
-            is_heavy_gpu = any(x in gpu.lower() for x in ['rtx', 'gtx', 'rx ', 'apple', '8060s'])
-            is_mid_gpu = any(x in gpu.lower() for x in ['arc', '680m', '860m', '840m', '660m', '780m', '890m', 'iris'])
-            is_good_cpu = any(x in cpu.lower() for x in ['i5', 'i7', 'i9', 'ultra', 'ryzen 5', 'ryzen 7', 'ryzen 9', 'ai 5', 'ai 7', 'ai 9', 'm2', 'm3', 'm4', 'm5'])
-            is_good_ram = ram_num >= 16
+        Fungsi tetap kompatibel dengan:
+        1. JSON baru yang menyimpan gpu_type secara semantik; dan
+        2. JSON lama yang menyimpan gpu_type sebagai vendor.
+        """
+        stored_type = str(laptop.get("gpu_type", "")).strip().lower()
 
-            if is_heavy_gpu:
-                if is_good_cpu and is_good_ram:
-                    reasons.append(f"Spesifikasi tinggi ({cpu}, RAM {ram_num}GB, Grafis {gpu}) membuatnya sangat lancar untuk game berat dan rendering 3D tanpa nge-lag.")
-                else:
-                    karena = "RAM yang pas-pasan" if not is_good_ram else "prosesor yang kurang maksimal"
-                    reasons.append(f"Grafis {gpu} miliknya sudah sangat bagus, namun performanya mungkin sedikit tertahan karena {karena}. Masih cukup oke untuk pemakaian menengah.")
-            elif is_mid_gpu and is_good_cpu and is_good_ram:
-                reasons.append(f"Meski tanpa kartu grafis khusus, kombinasi {cpu} dan RAM {ram_num}GB sudah sanggup melibas game ringan (e-sports) atau edit video dasar.")
-            else:
-                reasons.append(f"Perangkat ini dirancang untuk keseharian, bukan untuk game berat. Namun, {cpu} miliknya tetap aman jika sekadar untuk hiburan kasual.")
-                
-        # 2. Kebutuhan Desain, Editing Visual & UI/UX
-        if any(key in desc for key in ['desain', 'edit', 'kreator', 'visual', 'warna', 'video']):
-            if any(x in str(panel).lower() for x in ['ips', 'oled', 'mini']):
-                reasons.append(f"Layar tipe {panel} memberikan warna yang tajam dan akurat, sangat nyaman untuk desain grafis. Penyimpanan {storage} juga lega untuk file besar.")
-            else:
-                reasons.append(f"Kapasitas RAM {ram_num}GB membuat aplikasi desain berjalan lancar, dan penyimpanan {storage} cukup untuk menampung banyak aset gambar.")
-                
-        # 3. Kebutuhan Mobilitas & Travel
-        if any(key in desc for key in ['bawa', 'kampus', 'cafe', 'traveling', 'ringan', 'mobile']):
-            if float(laptop.get('weight_num', 3.0)) <= 1.5:
-                reasons.append(f"Bobotnya sangat ringan (hanya {bobot}), sehingga nyaman dibawa bepergian tanpa bikin pundak pegal.")
-            else:
-                reasons.append(f"Dengan berat {bobot}, laptop ini masih tergolong wajar dan pas untuk dimasukkan ke dalam tas ransel Anda.")
+        if stored_type == "dedicated":
+            return "Dedicated"
+        if stored_type == "integrated":
+            return "Integrated"
+        if stored_type == "unknown":
+            return "Unknown"
 
-        # 4. Kebutuhan Produktivitas/Skripsi/Coding
-        if any(key in desc for key in ['skripsi', 'tugas', 'kuliah', 'kerja', 'office', 'ngetik', 'coding', 'program', 'kantor']):
-            if ram_num >= 16:
-                reasons.append(f"RAM besar ({ram_num}GB) membuat Anda leluasa membuka puluhan tab browser, Zoom, dan aplikasi office sekaligus tanpa takut lemot.")
-            else:
-                reasons.append(f"Spesifikasi {cpu} dan RAM {ram_num}GB sangat pas dan hemat daya untuk kebutuhan ngetik, skripsi, atau sekadar browsing.")
+        gpu = str(laptop.get("gpu", "") or "").lower().strip()
+        if not gpu:
+            return "Unknown"
 
-        # 5. Default Reason (Jika tidak ada alasan spesifik yang terdeteksi)
-        if not reasons:
-            reasons.append(f"Spesifikasi {cpu} dan RAM {ram_num}GB pada laptop ini adalah pilihan yang paling aman dan logis sesuai dengan batasan anggaran Anda.")
-            
-        return " ".join(dict.fromkeys(reasons))
-    
-    # Fungsi utama untuk mendapatkan rekomendasi laptop berdasarkan input pengguna
-    def get_recommendations(self, user_input: Dict, debug: bool = False) -> Dict:
-        # 1. Injeksi Kebutuhan User ke dataset (Temporary)
-        dummy_user_id = "USER_QUERY_999"
-        user_profile = {"id": dummy_user_id, "usage": user_input['description']}
-        laptops_temp = self.laptops + [user_profile]
-        
-        # Re-initialize recommender untuk menghitung TF-IDF dengan input user
-        temp_recommender = LaptopRecommender(laptops_temp)
-        raw_recommendations = temp_recommender.recommend(dummy_user_id, top_n=len(laptops_temp)-1)
+        dedicated_patterns = [
+            r"\bnvidia\b",
+            r"\bgeforce\b",
+            r"\brtx[-\s]*\d+",
+            r"\bgtx[-\s]*\d+",
+            r"\bradeon\s+rx[-\s]*\d+",
+            r"\brx[-\s]*\d+",
+            r"\bintel\s+arc\s+[ab]\d{3,4}m?\b",
+            r"\barc\s+[ab]\d{3,4}m?\b",
+        ]
+        if any(re.search(pattern, gpu) for pattern in dedicated_patterns):
+            return "Dedicated"
 
-        highest_score = max((rec['score'] for rec in raw_recommendations), default=0)
-        
-        if highest_score < 0.02:
+        integrated_patterns = [
+            r"\bintel\s+uhd\b",
+            r"\buhd\s+graphics\b",
+            r"\biris\s+xe\b",
+            r"\bintel\s+graphics\b",
+            r"\bintel\s+arc\s+graphics\b",
+            r"\bradeon\s+graphics\b",
+            r"\bradeon\s+vega\b",
+            r"\bvega\s*\d*\b",
+            r"\bradeon\s+\d{3,4}[ms]\b",
+            r"\bapple\b",
+            r"\badreno\b",
+            r"\bintegrated\b",
+        ]
+        if any(re.search(pattern, gpu) for pattern in integrated_patterns):
+            return "Integrated"
+
+        return "Unknown"
+
+    @staticmethod
+    def _matches_screen_quality(requested: str, screen_quality: str) -> bool:
+        requested_key = str(requested).lower().strip()
+        quality = str(screen_quality).lower()
+        aliases = {
+            "hd": ["1366", "1280", " hd"],
+            "fhd": ["fhd", "1920 x 1080", "1920x1080"],
+            "wuxga": ["wuxga", "1920 x 1200", "1920x1200"],
+            "2.5k": ["2.5k", "wqxga", "2560"],
+            "2.8k": ["2.8k", "2880"],
+            "3k+": ["3k", "3.2k", "4k", "uhd", "3024", "3200", "3840"],
+        }
+        return any(alias in quality for alias in aliases.get(requested_key, [requested_key]))
+
+    # Periksa filter dengan aturan yang sama untuk sistem utama dan laporan Bab IV.
+    def check_filter_status(self, user_input: Dict, laptop: Dict) -> Dict:
+        failed = []
+        passed_price = True
+
+        try:
+            max_price = float(user_input.get("max_price", 50000000))
+            max_weight = float(user_input.get("max_weight", 3.0))
+            max_screen = float(user_input.get("max_screen", 18.0))
+            price = float(laptop.get("price", 0))
+            weight = float(laptop.get("weight_num", 3.0))
+            screen = float(laptop.get("screen_size_num", 18.0))
+        except (TypeError, ValueError):
             return {
-                "is_fallback": False, 
-                "strict_count": 0, 
-                "data": []
+                "passed_all": False,
+                "passed_price": False,
+                "failed": ["data numerik tidak valid"]
             }
 
-        # 2. Filter Logic (Pembersihan & Penyamaan)
+        if price > max_price:
+            failed.append("harga")
+            passed_price = False
+        if weight > max_weight:
+            failed.append("berat")
+        if screen > max_screen:
+            failed.append("ukuran layar")
+
+        if (
+            user_input.get("cpu", "All") != "All"
+            and str(user_input["cpu"]).lower()
+            not in str(laptop.get("cpu", "")).lower()
+        ):
+            failed.append("cpu")
+
+        if user_input.get("ram", "All") != "All":
+            requested_ram = (
+                str(user_input["ram"]).lower().replace(" gb", "").strip()
+            )
+            laptop_ram_match = re.search(r'(\d+)', str(laptop.get("ram", "")))
+            laptop_ram = laptop_ram_match.group(1) if laptop_ram_match else ""
+            if requested_ram != laptop_ram:
+                failed.append("ram")
+
+        if user_input.get("storage", "All") != "All":
+            requested_storage = str(user_input["storage"])
+            laptop_storage = str(laptop.get("storage", "")).lower()
+
+            if requested_storage == "1000":
+                valid_values = ["1 tb", "1000", "1024", "1tb"]
+                if not any(value in laptop_storage for value in valid_values):
+                    failed.append("storage")
+            elif requested_storage == "2000":
+                valid_values = ["2 tb", "2000", "2048", "2tb"]
+                if not any(value in laptop_storage for value in valid_values):
+                    failed.append("storage")
+            else:
+                requested_value = (
+                    requested_storage.lower().replace(" gb", "").strip()
+                )
+                storage_match = re.search(r'(\d+)', laptop_storage)
+                laptop_value = storage_match.group(1) if storage_match else ""
+                if requested_value != laptop_value:
+                    failed.append("storage")
+
+        for input_key, laptop_key, label in [
+            ("os", "os", "os"),
+            ("panel_type", "panel_type", "panel type"),
+        ]:
+            requested = user_input.get(input_key, "All")
+            if (
+                requested != "All"
+                and str(requested).lower()
+                not in str(laptop.get(laptop_key, "")).lower()
+            ):
+                failed.append(label)
+
+        requested_gpu = str(
+            user_input.get("gpu_type", "All")
+        ).strip()
+
+        if requested_gpu.lower() != "all":
+            actual_gpu = self._classify_gpu_type(laptop)
+
+            # Unknown tidak dipaksakan menjadi Integrated atau Dedicated.
+            if requested_gpu.lower() != actual_gpu.lower():
+                failed.append("gpu type")
+
+        requested_quality = user_input.get("screen_quality", "All")
+        if (
+            requested_quality != "All"
+            and not self._matches_screen_quality(
+                requested_quality,
+                laptop.get("screen_quality", "")
+            )
+        ):
+            failed.append("screen quality")
+
+        return {
+            "passed_all": len(failed) == 0,
+            "passed_price": passed_price,
+            "failed": failed
+        }
+
+    # Fungsi utama untuk menghasilkan rekomendasi berdasarkan input pengguna.
+    def get_recommendations(self, user_input: Dict, debug: bool = False) -> Dict:
+        # 1. Bentuk vektor dan ranking query dengan IDF korpus yang tetap.
+        query_info, raw_recommendations = self.rank_query(
+            user_input.get("description", "")
+        )
+
+        # Jika tidak ada satu pun term query yang dikenal oleh korpus,
+        # sistem tidak memaksakan rekomendasi berdasarkan skor yang tidak bermakna.
+        if not raw_recommendations:
+            result = {
+                "is_fallback": False,
+                "strict_count": 0,
+                "data": []
+            }
+            if debug:
+                result["debug"] = self._build_debug_info(
+                    user_input=user_input,
+                    query_info=query_info,
+                    raw_recommendations=[],
+                    final_results=[]
+                )
+            return result
+
+        # 2. Filter hasil berdasarkan batasan pengguna.
         strict_matches = []
         relaxed_matches = []
-        
-        # Ambil filter dari user_input (yang dikirim dari Flask)
-        max_p = user_input['max_price']
-        max_w = user_input['max_weight']
-        max_s = user_input['max_screen']
-        
-        # Iterasi hasil rekomendasi mentah dan filter berdasarkan kriteria user
+
         for rec in raw_recommendations:
-            laptop = next((l for l in laptops_temp if l.get('id') == rec['id']), None)
-            if not laptop or laptop['id'] == dummy_user_id: continue
+            source_laptop = self.laptop_by_id.get(rec.get("id"))
+            if not source_laptop:
+                continue
 
-            # Inisialisasi gembok filter
-            passed_all = True
-            passed_price = True
-            
-            # Filter Numerik
-            if float(laptop.get('price', 0)) > max_p: 
-                passed_all = False
-                passed_price = False # Jika gagal di filter harga, otomatis gagal strict match
-                
-            if float(laptop.get('weight_num', 3.0)) > max_w: passed_all = False
-            if float(laptop.get('screen_size_num', 18.0)) > max_s: passed_all = False
-            
-            # Filter String (CPU, RAM, Storage, dll)
-            if user_input['cpu'] != 'All' and user_input['cpu'].lower() not in str(laptop.get('cpu', '')).lower(): passed_all = False
-            if user_input['ram'] != 'All' and user_input['ram'].lower().replace(' gb', '') not in str(laptop.get('ram', '')).lower(): passed_all = False
-            
-            if user_input['storage'] != 'All':
-                val_storage = user_input['storage']
-                laptop_storage_str = str(laptop.get('storage', '')).lower()
-                # Jika user mencari 1 TB (dikirim sebagai "1000" dari React)
-                if val_storage == "1000":
-                    if "1 tb" not in laptop_storage_str and "1000" not in laptop_storage_str and "1tb" not in laptop_storage_str:
-                        passed_all = False
-                # Jika user mencari 2 TB (dikirim sebagai "2000" dari React)
-                elif val_storage == "2000":
-                    if "2 tb" not in laptop_storage_str and "2000" not in laptop_storage_str and "2tb" not in laptop_storage_str:
-                        passed_all = False
-                # Jika user mencari 128, 256, 512 GB
-                else:
-                    search_storage = val_storage.lower().replace(' gb', '')
-                    if search_storage not in laptop_storage_str:
-                        passed_all = False
-            
-            if user_input['os'] != 'All' and user_input['os'].lower() not in str(laptop.get('os', '')).lower(): passed_all = False
-            if user_input['gpu_type'] != 'All' and user_input['gpu_type'].lower() not in str(laptop.get('gpu_type', '')).lower(): passed_all = False
-            if user_input['panel_type'] != 'All' and user_input['panel_type'].lower() not in str(laptop.get('panel_type', '')).lower(): passed_all = False
-            if user_input['screen_quality'] != 'All' and user_input['screen_quality'].lower() not in str(laptop.get('screen_quality', '')).lower(): passed_all = False
+            # Salin data agar permintaan API tidak mengubah dataset utama
+            # yang disimpan di memori server.
+            laptop = dict(source_laptop)
 
-            laptop['similarity_score'] = rec['score']
-            laptop['explanation'] = self._generate_reason(user_input, laptop)
+            filter_status = self.check_filter_status(user_input, laptop)
+            passed_all = filter_status["passed_all"]
+            passed_price = filter_status["passed_price"]
 
-            if passed_all and rec['score'] > 0:
+            laptop["similarity_score"] = rec.get("score", 0.0)
+
+            # Hanya item dengan similarity positif yang dapat menjadi rekomendasi.
+            if passed_all and rec.get("score", 0.0) > 0:
                 strict_matches.append(laptop)
-            elif passed_price:
+            elif passed_price and rec.get("score", 0.0) > 0:
                 relaxed_matches.append(laptop)
 
-        # 3. Fallback Logic (Jika strict_matches kurang dari 6)
+        # 3. Ambil Top-6. Jika strict match kurang dari enam,
+        # lengkapi dengan kandidat relaxed yang masih berada di bawah anggaran.
         final_results = strict_matches[:6]
         is_fallback = False
-        
+
         if len(final_results) < 6:
             needed = 6 - len(final_results)
             final_results.extend(relaxed_matches[:needed])
-            if len(relaxed_matches) > 0: is_fallback = True
+            is_fallback = needed > 0 and len(relaxed_matches) > 0
 
         result = {
             "is_fallback": is_fallback,
@@ -325,12 +743,10 @@ class LaptopRecommender:
             "data": final_results
         }
 
-        # Debug hanya ditambahkan jika diminta, sehingga API website tetap bersih.
         if debug:
             result["debug"] = self._build_debug_info(
                 user_input=user_input,
-                laptops_temp=laptops_temp,
-                temp_recommender=temp_recommender,
+                query_info=query_info,
                 raw_recommendations=raw_recommendations,
                 final_results=final_results,
                 top_terms_n=10,
@@ -339,7 +755,7 @@ class LaptopRecommender:
 
         return result
 
-# Fungsi untuk memuat dataset laptop dari file JSON
+# Muat dataset laptop dari file JSON.
 def load_laptops(filepath: Path) -> List[Dict]:
     try:
         with open(filepath, "r", encoding="utf-8") as file:
@@ -349,8 +765,7 @@ def load_laptops(filepath: Path) -> List[Dict]:
     except json.JSONDecodeError:
         return []
 
-# Fungsi untuk menampilkan hasil debug algoritma di CLI.
-# Fungsi ini tidak dipanggil oleh website/API Flask.
+# Tampilkan hasil debug algoritma di CLI dan Fungsi ini tidak dipakai oleh website/API Flask.
 def print_debug_report(hasil: Dict) -> None:
     debug = hasil.get("debug")
     if not debug:
@@ -402,47 +817,45 @@ def print_debug_report(hasil: Dict) -> None:
             f"{item.get('score', 0.0):.4f}"
         )
 
-    print("="*80 + "\n")
-
-# Fungsi utama untuk menguji sistem rekomendasi secara lokal
+# Fungsi utama untuk menguji sistem rekomendasi secara lokal.
 def main() -> None:
-    # 1. Load dataset
+    # 1. Muat dataset.
     data_path = Path(__file__).parent / "laptops.json"
     laptops = load_laptops(data_path)
     recommender = LaptopRecommender(laptops)
 
-    # 2. Input Testing
+    # 2. Siapkan input uji.
     test_input = {
         "description": "saya butuh laptop untuk kuliah, mengerjakan skripsi, coding, dan bermain game ringan",
         "max_price": 25000000.0, "max_weight": 2.0, "max_screen": 14.0,
-        "cpu": "All", "ram": "All", "storage": "All", 
+        "cpu": "All", "ram": "All", "storage": "All",
         "os": "All", "gpu_type": "All", "panel_type": "All", "screen_quality": "All",
-        # Term yang ingin ditampilkan pada tabel TF-IDF BAB IV
-        "debug_terms": ["kuliah", "skripsi", "coding", "game", "ringan"]
+        # Term yang ingin ditampilkan pada tabel TF-IDF untuk debug.
+        "debug_terms": ["kuliah", "skripsi", "coding", "game_ringan"]
     }
 
-    # MULAI TIMER
+    # Mulai pengukuran waktu.
     start_time = time.time()
     hasil = recommender.get_recommendations(test_input, debug=True)
     end_time = time.time()
-    
-    # HITUNG DURATION (Milidetik)
+
+    # Hitung durasi dalam milidetik.
     duration = (end_time - start_time) * 1000
 
-    # 3. Print Header Profesional
+    # 3. Cetak header hasil pengujian.
     print("\n" + "="*80)
     print(" " * 20 + "SISTEM REKOMENDASI LAPTOP - EVALUASI SISTEM")
     print("="*80)
-    
-    # 4. Ringkasan Teknis (Inilah yang dilihat Dosen)
+
+    # 4. Ringkasan teknis hasil uji.
     print(f"[*] Query Deskripsi  : '{test_input['description']}'")
     print(f"[*] Filter Harga     : Rp {test_input['max_price']:,.0f}")
     print(f"[*] Execution Time   : {duration:.2f} ms")
     print(f"[*] Match Status     : {'Fallback Mode (Relaxed)' if hasil['is_fallback'] else 'Strict Mode'}")
     print(f"[*] Data Ditemukan   : {len(hasil['data'])} unit")
     print("-" * 80)
-    
-    # 5. Tabel Hasil
+
+    # 5. Tampilkan tabel hasil rekomendasi.
     if not hasil['data']:
         print("Tidak ada laptop ditemukan.")
     else:
@@ -450,13 +863,13 @@ def main() -> None:
         print("-" * 80)
         for idx, laptop in enumerate(hasil['data'], 1):
             nama = (laptop.get('name')[:28] + '..') if len(str(laptop.get('name'))) > 28 else laptop.get('name')
-            print(f"{idx:<4} | {laptop.get('brand','-'):<10} | {nama:<30} | {laptop.get('similarity_score',0)*100:.1f}% | Rp {float(laptop.get('price',0)):,.0f}")
+            print(f"{idx:<4} | {laptop.get('brand','-'):<10} | {nama:<30} | {laptop.get('similarity_score',0):.4f} | Rp {float(laptop.get('price',0)):,.0f}")
             
     print("="*80 + "\n")
 
-    # Tampilkan detail TF-IDF dan Cosine Similarity hanya saat dijalankan via CLI.
+    # Detail TF-IDF dan cosine similarity hanya tampil saat dijalankan via CLI.
     print_debug_report(hasil)
 
-# Jika file ini dijalankan secara langsung, panggil fungsi main()
+# Jalankan demo lokal jika file dieksekusi langsung.
 if __name__ == "__main__":
     main()
